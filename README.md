@@ -1,7 +1,7 @@
 # burry
 
 This is the `burry`, the Cloud Native Infrastructure BackUp & RecoveRY tool. Use `burry` to back up and restore
-critical infrastructure metadata services such as ZooKeeper and etcd.
+critical infrastructure services such as ZooKeeper and etcd.
 
 
 |to/from         |ZooKeeper    |etcd        |
@@ -16,6 +16,8 @@ critical infrastructure metadata services such as ZooKeeper and etcd.
 
 The essence of burry's algorithm is:
 
-1. On startup, discover data directory location
-1. Watch data directory location
-1. Until end: on changes, but at latest every `AT_LEAST_SEC` zip and upload to target storage
+- Until user cancels
+  - Either on changes or every `AT_LEAST_SEC`
+  - Walk the tree from root
+  - Retrieve data and metadata from each non-ephemeral node
+  - Write all data and metadata to storage target
