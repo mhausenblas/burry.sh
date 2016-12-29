@@ -23,7 +23,7 @@ var (
 )
 
 type ExhibitorState struct {
-	ExhibitorConfig
+	ExhibitorConfig ExhibitorConfig `json:"config"`
 }
 
 type ExhibitorConfig struct {
@@ -54,14 +54,18 @@ func get(url string, payload interface{}) error {
 		return err
 	}
 	defer r.Body.Close()
+	fmt.Printf("Payload %#v\n", r.Body)
 	return json.NewDecoder(r.Body).Decode(payload)
 }
 
 func datadirs() {
 	stateurl := strings.Join([]string{"http://", endpoint, INFRA_SVC_EXHIBITOR}, "")
 	econfig := &ExhibitorState{}
-	get(stateurl, *econfig)
-	fmt.Println("Config %+v ", econfig)
+	if err := get(stateurl, econfig); err != nil {
+		fmt.Printf("Can't parse response from endpoint due to %s\n", err)
+	} else {
+		fmt.Printf("Config %#v\n", econfig)
+	}
 }
 
 func main() {
