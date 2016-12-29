@@ -4,13 +4,13 @@ This is the `burry`, the Cloud Native Infrastructure BackUp & RecoveRY tool. Use
 critical infrastructure metadata services such as ZooKeeper and etcd.
 
 
-|to/from         |ZooKeeper    |etcd   |
-| --------------:| ----------- | ----- |
-| Amazon S3      | WIP         | -     |
-| Azure Storage  | -           | -     |
-| Google Storage | -           | -     |
-| Minio*         | WIP         | -     |
-
+|to/from         |ZooKeeper    |etcd        |
+| --------------:| ----------- | ---------- |
+| Amazon S3      | backlog 1   | -          |
+| Azure Storage  | -           | -          |
+| Google Storage | -           | -          |
+| Local          | WIP         | backlog 3  |
+| Minio*         | backlog 2   | -          |
 
 *) [Minio](https://www.minio.io/) either on-premises or in the cloud, self-hosted.
 
