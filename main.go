@@ -1,10 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
-	// "github.com/samuel/go-zookeeper/zk"
-	"encoding/json"
+	"github.com/samuel/go-zookeeper/zk"
 	"net/http"
 	"os"
 	"strings"
@@ -54,7 +54,6 @@ func get(url string, payload interface{}) error {
 		return err
 	}
 	defer r.Body.Close()
-	fmt.Printf("Payload %#v\n", r.Body)
 	return json.NewDecoder(r.Body).Decode(payload)
 }
 
@@ -68,6 +67,20 @@ func datadirs() {
 	}
 }
 
+func walkZK() {
+	zks := []string{endpoint}
+	conn, _, _ := zk.Connect(zks, time.Second)
+	if children, stat, err := conn.Children("/"); err != nil {
+		fmt.Println(fmt.Sprintf("Can't find znodes due to %s", err))
+	} else {
+		fmt.Println(fmt.Sprintf("%+v - %+v", children, stat))
+		// for _, c := range children {
+		// 	if _, _, err := conn.Get(c); err != nil {
+		// 	}
+		// }
+	}
+}
+
 func main() {
 	if version {
 		about()
@@ -77,5 +90,5 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
-	datadirs()
+	walkZK()
 }
