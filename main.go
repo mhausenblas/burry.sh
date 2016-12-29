@@ -20,16 +20,13 @@ var (
 	version bool
 	// the endpoint to use
 	endpoint string
+	// the backup and restore manifest to use
+	brm BRManifest
 )
 
-type ExhibitorState struct {
-	ExhibitorConfig ExhibitorConfig `json:"config"`
-}
-
-type ExhibitorConfig struct {
-	LogDir       string `json:"logIndexDirectory"`
-	SnapshotsDir string `json:"zookeeperDataDirectory"`
-}
+// reap function types take a path and
+// a value as parameters
+type reap func(string, string)
 
 func init() {
 	flag.BoolVar(&version, "version", false, "Display version information")
@@ -70,14 +67,41 @@ func datadirs() {
 func walkZK() {
 	zks := []string{endpoint}
 	conn, _, _ := zk.Connect(zks, time.Second)
-	if children, stat, err := conn.Children("/"); err != nil {
-		fmt.Println(fmt.Sprintf("Can't find znodes due to %s", err))
+	visit(*conn, "/", rznode)
+}
+
+// rznode reaps a ZooKeeper node
+func rznode(path string, val string) {
+	fmt.Println(fmt.Sprintf("%s: %+v", path, val))
+}
+
+// visit visits a path in the ZooKeeper tree
+func visit(conn zk.Conn, path string, fn reap) {
+	fmt.Println("PROCESSING ", path)
+	if children, _, err := conn.Children(path); err != nil {
+		fmt.Println(fmt.Sprintf("%s", err))
+		return
 	} else {
-		fmt.Println(fmt.Sprintf("%+v - %+v", children, stat))
-		// for _, c := range children {
-		// 	if _, _, err := conn.Get(c); err != nil {
-		// 	}
-		// }
+		fmt.Println(path, " HAS ", len(children), " CHILDREN")
+		if len(children) > 0 { // there are children
+			for _, c := range children {
+				fmt.Println("RAW CHILD ", c)
+				newpath := ""
+				if path == "/" {
+					newpath = strings.Join([]string{path, c}, "")
+				} else {
+					newpath = strings.Join([]string{path, c}, "/")
+				}
+				fmt.Println("VISITING CHILD ", newpath)
+				visit(conn, newpath, fn)
+			}
+		} else {
+			if val, _, err := conn.Get(path); err != nil {
+				fmt.Println(fmt.Sprintf("Can't process %s due to %s", path, err))
+			} else {
+				fn(path, string(val))
+			}
+		}
 	}
 }
 
