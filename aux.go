@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
+	azip "github.com/pierrre/archivefile/zip"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -53,10 +54,37 @@ func store(path string, val string) {
 		log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Rewriting root"))
 		fpath, _ = filepath.Abs(filepath.Join(cwd, based))
 	} else {
-		fpath, _ = filepath.Abs(filepath.Join(cwd, based, path))
+		fpath, _ = filepath.Abs(filepath.Join(cwd, based, strings.Replace(path, ":", "BURRY_ESC_COLON", -1)))
 	}
 	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
 		log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", err))
+		return
+	} else {
+		cpath, _ := filepath.Abs(filepath.Join(fpath, "content"))
+		if c, cerr := os.Create(cpath); cerr != nil {
+			log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", cerr))
+		} else {
+			defer c.Close()
+			if nbytes, err := c.WriteString(val); err != nil {
+				log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", err))
+			} else {
+				log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Stored %s in %s with %d bytes", path, fpath, nbytes))
+			}
+		}
 	}
-	log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Stored %s in %s", path, fpath))
+}
+
+func arch() {
+	// defer func() {
+	// 	_ = os.RemoveAll(based)
+	// }()
+	cwd, _ := os.Getwd()
+	opath := filepath.Join(cwd, "zk.zip")
+	ipath := filepath.Join(cwd, based, "/")
+	progress := func(apath string) {
+		log.WithFields(log.Fields{"func": "arch"}).Info(fmt.Sprintf("%s", apath))
+	}
+	if err := azip.ArchiveFile(ipath, opath, progress); err != nil {
+		log.WithFields(log.Fields{"func": "arch"}).Panic(fmt.Sprintf("%s", err))
+	}
 }

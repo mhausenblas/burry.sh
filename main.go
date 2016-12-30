@@ -81,6 +81,7 @@ func walkZK() {
 		log.WithFields(log.Fields{"func": "walkZK"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
 	} else {
 		visit(*conn, "/", rznode)
+		arch()
 	}
 }
 
