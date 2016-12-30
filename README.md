@@ -44,6 +44,8 @@ Arguments:
         The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor
   -isvc string
         The type of infra service to back up or restore. Supported values are [etcd zk] (default "zk")
+  -overwrite
+        Command line values overwrite manifest values
   -target string
         The storage target to use. Supported values are [local tty] (default "tty")
   -version

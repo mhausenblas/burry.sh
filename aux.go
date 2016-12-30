@@ -5,6 +5,8 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -45,5 +47,16 @@ func lookupst(name string) int {
 }
 
 func store(path string, val string) {
-	log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Stored %s", path))
+	cwd, _ := os.Getwd()
+	fpath := ""
+	if path == "/" {
+		log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Rewriting root"))
+		fpath, _ = filepath.Abs(filepath.Join(cwd, based))
+	} else {
+		fpath, _ = filepath.Abs(filepath.Join(cwd, based, path))
+	}
+	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
+		log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", err))
+	}
+	log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Stored %s in %s", path, fpath))
 }

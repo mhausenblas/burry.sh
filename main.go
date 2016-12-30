@@ -8,6 +8,7 @@ import (
 	"github.com/samuel/go-zookeeper/zk"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,8 @@ var (
 	// the backup and restore manifest to use:
 	brf      Burryfest
 	ErrNoBFF = errors.New("no manifest found")
+	// local scratch base directory
+	based string
 )
 
 // reap function types take a path and
@@ -66,6 +69,7 @@ func init() {
 			}
 		}
 	}
+	based = strconv.FormatInt(time.Now().Unix(), 10)
 	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
 }
 
