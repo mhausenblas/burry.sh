@@ -5,14 +5,14 @@ critical infrastructure base services such as ZooKeeper and etcd.
 
 `burry` support back up/restore the following infrastructure services with the respective storage targets:
 
-|to/from         |ZooKeeper    |etcd        |
-| --------------:| ----------- | ---------- |
-| Amazon S3      | WIP         | -          |
-| Azure Storage  | -           | -          |
-| Google Storage | -           | -          |
-| Local          | yes         | backlog 3  |
-| Minio*         | backlog 1   | -          |
-| TTY**          | yes         | backlog 2  |
+|to/from         |ZooKeeper   |etcd        |
+| --------------:| ---------- | ---------- |
+| Amazon S3      | WIP        | backlog    |
+| Azure Storage  | backlog    | backlog    |
+| Google Storage | backlog    | backlog    |
+| Local          | yes        | WIP        |
+| Minio*         | backlog    | backlog    |
+| TTY**          | yes        | WIP        |
 
 ```
  *) Minio can be either on-premises or in the cloud, but always self-hosted. See also https://www.minio.io

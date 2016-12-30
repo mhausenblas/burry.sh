@@ -44,7 +44,7 @@ func init() {
 	sst := STORAGE_TARGETS[:]
 	sort.Strings(sst)
 	flag.BoolVar(&version, "version", false, "Display version information")
-	flag.BoolVar(&overwrite, "overwrite", false, "Command line values overwrite manifest values")
+	flag.BoolVar(&overwrite, "overwrite", false, "Make command line values overwrite manifest values")
 	flag.StringVar(&isvc, "isvc", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
 	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
 	flag.StringVar(&starget, "target", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
