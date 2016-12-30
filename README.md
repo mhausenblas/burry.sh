@@ -52,6 +52,6 @@ Arguments:
 
 Policy is:
 
-1. Command line parameters in general overwrite values from the manifest.
+1. If no manifest `.burryfest` exists in the current directory, the command line parameters passed are used to create a manifest file.
 1. If a manifest `.burryfest` exists in the current directory it will be used.
 1. For every storage target other than `tty` a new manifest in the timestamped ZIP file will be created.
