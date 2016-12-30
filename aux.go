@@ -68,23 +68,25 @@ func store(path string, val string) {
 			if nbytes, err := c.WriteString(val); err != nil {
 				log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", err))
 			} else {
-				log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Stored %s in %s with %d bytes", path, fpath, nbytes))
+				log.WithFields(log.Fields{"func": "store"}).Debug(fmt.Sprintf("Stored %s in %s with %d bytes", path, fpath, nbytes))
 			}
 		}
 	}
 }
 
 func arch() {
-	// defer func() {
-	// 	_ = os.RemoveAll(based)
-	// }()
+	defer func() {
+		_ = os.RemoveAll(based)
+	}()
 	cwd, _ := os.Getwd()
-	opath := filepath.Join(cwd, "zk.zip")
+	opath := filepath.Join(cwd, based+".zip")
 	ipath := filepath.Join(cwd, based, "/")
 	progress := func(apath string) {
-		log.WithFields(log.Fields{"func": "arch"}).Info(fmt.Sprintf("%s", apath))
+		log.WithFields(log.Fields{"func": "arch"}).Debug(fmt.Sprintf("%s", apath))
 	}
 	if err := azip.ArchiveFile(ipath, opath, progress); err != nil {
 		log.WithFields(log.Fields{"func": "arch"}).Panic(fmt.Sprintf("%s", err))
+	} else {
+		log.WithFields(log.Fields{"func": "arch"}).Info(fmt.Sprintf("Backup available in %s", opath))
 	}
 }
