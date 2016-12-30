@@ -6,6 +6,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/samuel/go-zookeeper/zk"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -17,10 +18,16 @@ const (
 
 var (
 	version bool
-	// the endpoint to use
+	// the type of infra service to back up or restore:
+	isvc           string
+	INFRA_SERVICES = [...]string{"etcd", "zk"}
+	// the infra service endpoint to use:
 	endpoint string
-	// the backup and restore manifest to use
-	brm BRManifest
+	// the storage target to use:
+	starget         string
+	STORAGE_TARGETS = [...]string{"tty", "local"}
+	// the backup and restore manifest to use:
+	brf Burryfest
 )
 
 // reap function types take a path and
@@ -28,8 +35,12 @@ var (
 type reap func(string, string)
 
 func init() {
+	sst := STORAGE_TARGETS[:]
+	sort.Strings(sst)
 	flag.BoolVar(&version, "version", false, "Display version information")
-	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The endpoint to use. This depends on the infra service you want to back up. Example: localhost:8181 for Exhibitor"))
+	flag.StringVar(&isvc, "isvc", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
+	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
+	flag.StringVar(&starget, "target", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
 
 	flag.Usage = func() {
 		fmt.Printf("Usage: %s [args]\n\n", os.Args[0])
@@ -37,25 +48,41 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
 	}
+	brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
 }
 
+// walkZK walks a ZooKeeper tree
 func walkZK() {
 	zks := []string{endpoint}
 	conn, _, _ := zk.Connect(zks, time.Second)
-	visit(*conn, "/", rznode)
+	if err := manifest(); err != nil {
+		log.WithFields(log.Fields{"func": "walkZK"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
+	} else {
+		visit(*conn, "/", rznode)
+	}
 }
 
-// rznode reaps a ZooKeeper node
+// rznode reaps a ZooKeeper node.
+// note that the actual processing is determined by
+// the storage target
 func rznode(path string, val string) {
-	log.WithFields(log.Fields{"func": "rznode"}).Info(fmt.Sprintf("%s:", path))
-	log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%v", val))
+	switch lookupst(starget) {
+	case 0: // TTY
+		log.WithFields(log.Fields{"func": "rznode"}).Info(fmt.Sprintf("%s:", path))
+		log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%v", val))
+	case 1: // local storage
+		store(path, val)
+	default:
+		log.WithFields(log.Fields{"func": "rznode"}).Fatal(fmt.Sprintf("Storage target %s unknown or not yet supported", starget))
+	}
 }
 
 // visit visits a path in the ZooKeeper tree
+// and applies the reap function fn on the node
+// at the path if it is a leaf node
 func visit(conn zk.Conn, path string, fn reap) {
 	log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("On node %s", path))
 	if children, _, err := conn.Children(path); err != nil {
@@ -74,7 +101,7 @@ func visit(conn zk.Conn, path string, fn reap) {
 				log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("Next visiting child %s", newpath))
 				visit(conn, newpath, fn)
 			}
-		} else { // we're on a leave node
+		} else { // we're on a leaf node
 			if val, _, err := conn.Get(path); err != nil {
 				log.WithFields(log.Fields{"func": "visit"}).Error(fmt.Sprintf("%s", err))
 			} else {

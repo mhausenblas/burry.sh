@@ -7,12 +7,12 @@ critical infrastructure base services such as ZooKeeper and etcd.
 
 |to/from         |ZooKeeper    |etcd        |
 | --------------:| ----------- | ---------- |
-| Amazon S3      | backlog 1   | -          |
+| Amazon S3      | WIP         | -          |
 | Azure Storage  | -           | -          |
 | Google Storage | -           | -          |
-| Local          | WIP         | backlog 3  |
-| Minio*         | backlog 2   | -          |
-| TTY**          | WIP         | -          |
+| Local          | yes         | backlog 3  |
+| Minio*         | backlog 1   | -          |
+| TTY**          | yes         | backlog 2  |
 
 ```
  *) Minio can be either on-premises or in the cloud, but always self-hosted. See also https://www.minio.io
@@ -31,4 +31,27 @@ The essence of burry's algorithm is:
 
 ## Install
 
+TBD.
+
 ## Use
+
+```bash
+$ burry --help
+Usage: burry [args]
+
+Arguments:
+  -endpoint string
+        The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor
+  -isvc string
+        The type of infra service to back up or restore. Supported values are [etcd zk] (default "zk")
+  -target string
+        The storage target to use. Supported values are [local tty] (default "tty")
+  -version
+        Display version information
+```
+
+Policy is:
+
+1. Command line parameters in general overwrite values from the manifest.
+1. If a manifest `.burryfest` exists in the current directory it will be used.
+1. For every storage target other than `tty` a new manifest in the timestamped ZIP file will be created.
