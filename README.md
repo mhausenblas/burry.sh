@@ -12,8 +12,12 @@ critical infrastructure base services such as ZooKeeper and etcd.
 | Google Storage | -           | -          |
 | Local          | WIP         | backlog 3  |
 | Minio*         | backlog 2   | -          |
+| TTY**          | WIP         | -          |
 
-*) [Minio](https://www.minio.io/) either on-premises or in the cloud, self-hosted.
+```
+ *) Minio can be either on-premises or in the cloud, but always self-hosted. See also https://www.minio.io
+**) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
+```
 
 ## Architecture
 

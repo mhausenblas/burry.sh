@@ -1,11 +1,10 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/samuel/go-zookeeper/zk"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -40,30 +39,6 @@ func init() {
 	flag.Parse()
 }
 
-func about() {
-	fmt.Printf("This is burry in version %s\n", VERSION)
-}
-
-func get(url string, payload interface{}) error {
-	c := &http.Client{Timeout: 2 * time.Second}
-	r, err := c.Get(url)
-	if err != nil {
-		return err
-	}
-	defer r.Body.Close()
-	return json.NewDecoder(r.Body).Decode(payload)
-}
-
-func datadirs() {
-	stateurl := strings.Join([]string{"http://", endpoint, INFRA_SVC_EXHIBITOR}, "")
-	econfig := &ExhibitorState{}
-	if err := get(stateurl, econfig); err != nil {
-		fmt.Printf("Can't parse response from endpoint due to %s\n", err)
-	} else {
-		fmt.Printf("Config %#v\n", econfig)
-	}
-}
-
 func walkZK() {
 	zks := []string{endpoint}
 	conn, _, _ := zk.Connect(zks, time.Second)
@@ -72,32 +47,32 @@ func walkZK() {
 
 // rznode reaps a ZooKeeper node
 func rznode(path string, val string) {
-	fmt.Println(fmt.Sprintf("%s: %+v", path, val))
+	log.WithFields(log.Fields{"func": "rznode"}).Info(fmt.Sprintf("%s:", path))
+	log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%+v", val))
 }
 
 // visit visits a path in the ZooKeeper tree
 func visit(conn zk.Conn, path string, fn reap) {
-	fmt.Println("PROCESSING ", path)
+	log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("On node %s", path))
 	if children, _, err := conn.Children(path); err != nil {
-		fmt.Println(fmt.Sprintf("%s", err))
+		log.WithFields(log.Fields{"func": "visit"}).Error(fmt.Sprintf("%s", err))
 		return
 	} else {
-		fmt.Println(path, " HAS ", len(children), " CHILDREN")
+		log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
 		if len(children) > 0 { // there are children
 			for _, c := range children {
-				fmt.Println("RAW CHILD ", c)
 				newpath := ""
 				if path == "/" {
 					newpath = strings.Join([]string{path, c}, "")
 				} else {
 					newpath = strings.Join([]string{path, c}, "/")
 				}
-				fmt.Println("VISITING CHILD ", newpath)
+				log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("Next visiting child %s", newpath))
 				visit(conn, newpath, fn)
 			}
-		} else {
+		} else { // we're on a leave node
 			if val, _, err := conn.Get(path); err != nil {
-				fmt.Println(fmt.Sprintf("Can't process %s due to %s", path, err))
+				log.WithFields(log.Fields{"func": "visit"}).Error(fmt.Sprintf("%s", err))
 			} else {
 				fn(path, string(val))
 			}
