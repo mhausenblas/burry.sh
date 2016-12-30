@@ -37,6 +37,10 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if envd := os.Getenv("DEBUG"); envd != "" {
+		log.SetLevel(log.DebugLevel)
+	}
 }
 
 func walkZK() {
@@ -48,7 +52,7 @@ func walkZK() {
 // rznode reaps a ZooKeeper node
 func rznode(path string, val string) {
 	log.WithFields(log.Fields{"func": "rznode"}).Info(fmt.Sprintf("%s:", path))
-	log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%+v", val))
+	log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%v", val))
 }
 
 // visit visits a path in the ZooKeeper tree
