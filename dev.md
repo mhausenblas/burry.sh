@@ -1,4 +1,10 @@
-# ZooKeeper
+## etcd
+
+```bash
+$ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
+```
+
+## ZooKeeper
 
 The local test environment for ZooKeeper uses [mbabineau/zookeeper-exhibitor](https://hub.docker.com/r/mbabineau/zookeeper-exhibitor/).
 Note to replace `HOSTNAME=mh9` with the value for your host:

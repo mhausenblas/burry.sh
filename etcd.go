@@ -3,11 +3,26 @@ package main
 import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
+	"github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
+	"time"
 )
 
 // walkETCD walks an etcd tree, applying
 // a reap function per node
 func walkETCD() bool {
+	cfg := client.Config{
+		Endpoints:               []string{"http://" + brf.Endpoint},
+		Transport:               client.DefaultTransport,
+		HeaderTimeoutPerRequest: time.Second,
+	}
+	c, _ := client.New(cfg)
+	kapi := client.NewKeysAPI(c)
+	if resp, err := kapi.Get(context.Background(), "/foo", nil); err != nil {
+		log.WithFields(log.Fields{"func": "rekey"}).Error(fmt.Sprintf("%s", err))
+	} else {
+		log.WithFields(log.Fields{"func": "rekey"}).Info(fmt.Sprintf("metadata: %v, value: %q\n", resp, resp.Node.Value))
+	}
 	return true
 }
 
