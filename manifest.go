@@ -43,6 +43,7 @@ type ArchMeta struct {
 func parsecred() Credentials {
 	c := Credentials{}
 	if cred == "" {
+		c.Params = []CredParams{}
 		return c
 	}
 	raw := strings.Split(cred, ",")

@@ -88,7 +88,7 @@ An example of a burry manifest file looks like:
     "target": "local",
     "credentials": {
         "target-endpoint": "",
-        "params": {}
+        "params": []
     }
 }
 ```
