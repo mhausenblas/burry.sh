@@ -36,7 +36,8 @@ var (
 
 // reap function types take a node path
 // and a value as parameters and perform
-// some side effect such as storing it.
+// some side effect, such as storing it.
+// see for example aux.go#reapsimple()
 type reap func(string, string)
 
 func init() {

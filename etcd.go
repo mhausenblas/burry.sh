@@ -9,7 +9,7 @@ import (
 )
 
 // walkETCD walks an etcd tree, applying
-// a reap function per node
+// a reap function per leaf node visited
 func walkETCD() bool {
 	if brf.Endpoint == "" {
 		return false
@@ -23,7 +23,7 @@ func walkETCD() bool {
 	kapi := client.NewKeysAPI(c)
 	// use the etcd API to visit each node and store
 	// the values in the local filesystem:
-	visitETCD(kapi, "/", rekey)
+	visitETCD(kapi, "/", reapsimple)
 	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
 		// create an archive file of the node's values:
 		res := arch()
@@ -55,20 +55,5 @@ func visitETCD(kapi client.KeysAPI, path string, fn reap) {
 		} else { // we're on a leaf node
 			fn(resp.Node.Key, string(resp.Node.Value))
 		}
-	}
-}
-
-// rekey reaps an etcd key.
-// note that the actual processing is determined by
-// the storage target
-func rekey(path string, val string) {
-	switch lookupst(brf.StorageTarget) {
-	case 0: // TTY
-		log.WithFields(log.Fields{"func": "rekey"}).Info(fmt.Sprintf("%s:", path))
-		log.WithFields(log.Fields{"func": "rekey"}).Debug(fmt.Sprintf("%v", val))
-	case 1: // local storage
-		store(path, val)
-	default:
-		log.WithFields(log.Fields{"func": "rekey"}).Fatal(fmt.Sprintf("Storage target %s unknown or not yet supported", brf.StorageTarget))
 	}
 }

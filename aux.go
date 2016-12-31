@@ -14,6 +14,8 @@ func about() {
 	fmt.Printf("This is burry in version %s\n", VERSION)
 }
 
+// lookupst returns the storage target index
+// based on a name (or -1 if not known)
 func lookupst(name string) int {
 	switch strings.ToLower(name) {
 	case "tty":
@@ -27,6 +29,23 @@ func lookupst(name string) int {
 	}
 }
 
+// reapsimple reaps a node at a path.
+// note that the actual processing is
+// determined by the storage target
+func reapsimple(path string, val string) {
+	stidx := lookupst(brf.StorageTarget)
+	switch {
+	case stidx == 0: // TTY
+		log.WithFields(log.Fields{"func": "reapsimple"}).Info(fmt.Sprintf("%s:", path))
+		log.WithFields(log.Fields{"func": "reapsimple"}).Debug(fmt.Sprintf("%v", val))
+	case stidx >= 1: // some kind of actual storage
+		store(path, val)
+	default:
+		log.WithFields(log.Fields{"func": "reapsimple"}).Fatal(fmt.Sprintf("Storage target %s unknown or not yet supported", brf.StorageTarget))
+	}
+}
+
+// store stores the value val at the path path in the local filesystem
 func store(path string, val string) {
 	cwd, _ := os.Getwd()
 	fpath := ""
@@ -54,6 +73,8 @@ func store(path string, val string) {
 	}
 }
 
+// arch creates a ZIP archive of the current timestamped
+// local backup that store() has generated
 func arch() string {
 	defer func() {
 		_ = os.RemoveAll(based)
@@ -74,6 +95,8 @@ func arch() string {
 	return opath
 }
 
+// remote uploads the local ZIP archive to a
+// remote storage target such as S3 or Minio
 func remote(localarch string) {
 	stidx := lookupst(brf.StorageTarget)
 	switch {
@@ -86,6 +109,7 @@ func remote(localarch string) {
 	}
 }
 
+// remoteS3 handles S3 compatible (remote) storage targets
 func remoteS3(localarch string) {
 	defer func() {
 		_ = os.Remove(localarch)

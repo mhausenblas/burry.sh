@@ -9,7 +9,7 @@ import (
 )
 
 // walkZK walks a ZooKeeper tree, applying
-// a reap function per node
+// a reap function per leaf node visited
 func walkZK() bool {
 	if brf.Endpoint == "" {
 		return false
@@ -18,7 +18,7 @@ func walkZK() bool {
 	conn, _, _ := zk.Connect(zks, time.Second)
 	// use the ZK API to visit each node and store
 	// the values in the local filesystem:
-	visitZK(*conn, "/", rznode)
+	visitZK(*conn, "/", reapsimple)
 	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
 		// create an archive file of the node's values:
 		res := arch()
@@ -56,21 +56,5 @@ func visitZK(conn zk.Conn, path string, fn reap) {
 				fn(path, string(val))
 			}
 		}
-	}
-}
-
-// rznode reaps a ZooKeeper node.
-// note that the actual processing is determined by
-// the storage target
-func rznode(path string, val string) {
-	stidx := lookupst(brf.StorageTarget)
-	switch {
-	case stidx == 0: // TTY
-		log.WithFields(log.Fields{"func": "rznode"}).Info(fmt.Sprintf("%s:", path))
-		log.WithFields(log.Fields{"func": "rznode"}).Debug(fmt.Sprintf("%v", val))
-	case stidx >= 1: // some kind of actual storage
-		store(path, val)
-	default:
-		log.WithFields(log.Fields{"func": "rznode"}).Fatal(fmt.Sprintf("Storage target %s unknown or not yet supported", brf.StorageTarget))
 	}
 }

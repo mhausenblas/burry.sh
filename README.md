@@ -3,35 +3,40 @@
 This is the `burry`, the BackUp & RecoveRY tool for cloud native infrastructure services. Use `burry` to back up and restore
 critical infrastructure base services such as ZooKeeper and etcd.
 
-`burry` support back up/restore the following infrastructure services with the respective storage targets:
+`burry` currently supports backing up the following infra services (`from`) into storage targets (`to`):
 
 |to/from         |ZooKeeper   |etcd        |
 | --------------:| ---------- | ---------- |
-| Amazon S3      | yes        | backlog    |
+| Amazon S3      | yes        | yes        |
 | Azure Storage  | backlog    | backlog    |
 | Google Storage | backlog    | backlog    |
-| Local          | yes        | WIP        |
-| Minio*         | yes        | backlog    |
-| TTY**          | yes        | WIP        |
+| Local          | yes        | yes        |
+| Minio*         | yes        | yes        |
+| TTY**          | yes        | yes        |
 
 ```
  *) Minio can be either on-premises or in the cloud, but always self-hosted. See also https://www.minio.io
 **) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
 ```
 
+Note that restoring infrastructure services from storage targets is NOT YET implemented.
+
 ## Architecture
 
-The essence of burry's algorithm is:
+`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s algorithm is:
 
-- Until user cancels
-  - Either on changes or every `AT_LEAST_SEC`
-  - Walk the tree from root
-  - Retrieve data and metadata from each non-ephemeral node
-  - Write all data and metadata to storage target
+- Walk the tree from the root
+- For every non-leaf node: process its children
+- For every leaf node, store the content (that is, the node value) 
+- Depending on the storage target selected, create archive incl. metadata
 
 ## Install
 
-TBD.
+Currently, only 'build from source' install is available (note: replace `GOOS=linux` with your platform):
+
+    $ go get github.com/mhausenblas/burry.sh
+    $ GOOS=linux go build
+    $ godoc -http=":6060"
 
 ## Use
 
@@ -61,6 +66,8 @@ Policy is:
 Examples usages of `burry` follow.
 
 ### Back up DC/OS system ZooKeeper to Amazon S3
+
+See the [development and testing](dev.md#zookeeper) notes for the test setup.
 
 ```bash
 # let's first do a dry run, that is, only dump to screen.
@@ -100,6 +107,20 @@ INFO[0008] Operation successfully completed.             func=main
 
 ### Back up etcd to Amazon S3
 
+See the [development and testing](dev.md#etcd) notes for the test setup.
+
 ```bash
-$ ./burry.sh --endpoint etcd.mesos:1026 --isvc etcd
+$ ./burry.sh --endpoint etcd.mesos:1026 --isvc etcd --target s3
+INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
+INFO[0000] On node /                                     func=visitETCD
+INFO[0000] On node /foo                                  func=visitETCD
+INFO[0000] On node /meh                                  func=visitETCD
+INFO[0000] On node /buz                                  func=visitETCD
+INFO[0000] On node /buz/meh                              func=visitETCD
+INFO[0000] Adding /tmp/.burryfest to /tmp/1483173687     func=addbf
+INFO[0000] Backup available in /tmp/1483173687.zip       func=arch
+INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in Amazon S3  func=remoteS3
+INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in Amazon S3  func=remoteS3
+INFO[0001] Operation successfully completed.             func=main
 ```
