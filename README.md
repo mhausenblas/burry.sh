@@ -36,8 +36,11 @@ Currently, only 'build from source' install is available (note: replace `GOOS=li
 
     $ go get github.com/mhausenblas/burry.sh
     $ GOOS=linux go build
+    $ mv burry.sh burry
     $ godoc -http=":6060" &
     $ open http://localhost:6060/pkg/github.com/mhausenblas/burry.sh/
+
+See also [GoDocs](https://godoc.org/github.com/mhausenblas/burry.sh).
 
 ## Use
 
@@ -76,6 +79,33 @@ Parameter reuse policy is  as follows:
 
 Next we will have a look of some examples usages of `burry`.
 
+### Screen dump of local ZooKeeper content
+
+See the [development and testing](dev.md#zookeeper) notes for the test setup.
+
+```bash
+$ docker ps
+CONTAINER ID        IMAGE                                  COMMAND                  CREATED             STATUS              PORTS                                                                                            NAMES
+9ae41a9a02f8        mbabineau/zookeeper-exhibitor:latest   "bash -ex /opt/exhibi"   2 days ago          Up 2 days           0.0.0.0:2181->2181/tcp, 0.0.0.0:2888->2888/tcp, 0.0.0.0:3888->3888/tcp, 0.0.0.0:8181->8181/tcp   amazing_kilby
+
+$ DEBUG=true ./burry --endpoint localhost:2181
+INFO[0000] Using existing burry manifest file /home/core/.burryfest  func=init
+INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Credentials:}  func=init
+INFO[0000] On node /                                     func=visitZK
+2016/12/31 09:27:25 Connected to [::1]:2181
+2016/12/31 09:27:25 Authenticated: id=97189781074870273, timeout=4000
+DEBU[0000] / has 1 children                              func=visitZK
+DEBU[0000] Next visiting child /zookeeper                func=visitZK
+INFO[0000] On node /zookeeper                            func=visitZK
+DEBU[0000] /zookeeper has 1 children                     func=visitZK
+DEBU[0000] Next visiting child /zookeeper/quota          func=visitZK
+INFO[0000] On node /zookeeper/quota                      func=visitZK
+DEBU[0000] /zookeeper/quota has 0 children               func=visitZK
+INFO[0000] /zookeeper/quota:                             func=reapsimple
+DEBU[0000]                                               func=reapsimple
+INFO[0000] Operation successfully completed.             func=main
+```
+
 ### Back up DC/OS system ZooKeeper to Amazon S3
 
 See the [development and testing](dev.md#zookeeper) notes for the test setup.
@@ -83,7 +113,7 @@ See the [development and testing](dev.md#zookeeper) notes for the test setup.
 ```bash
 # let's first do a dry run, that is, only dump to screen.
 # this works because the default value of --target is 'tty'
-$ ./burry.sh --endpoint leader.mesos:2181
+$ ./burry --endpoint leader.mesos:2181
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Credentials:}  func=init
 INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
 INFO[0000] On node /                                     func=visit
@@ -100,7 +130,7 @@ $ cat .burryfest
 # now we know we can read stuff from ZK, let's get it
 # backed up into Amazon S3; you can either remove
 # .burryfest or use --overwrite to specify the new storage target
-$ ./burry.sh --endpoint leader.mesos:2181 --target s3 --overwrite
+$ ./burry --endpoint leader.mesos:2181 --target s3 --overwrite
 INFO[0008] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Credentials:}  func=init
 INFO[0000] On node /                                     func=visit
@@ -121,7 +151,7 @@ INFO[0008] Operation successfully completed.             func=main
 See the [development and testing](dev.md#etcd) notes for the test setup.
 
 ```bash
-$ ./burry.sh --endpoint etcd.mesos:1026 --isvc etcd --target s3
+$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target s3
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
 INFO[0000] On node /                                     func=visitETCD

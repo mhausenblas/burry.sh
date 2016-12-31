@@ -2,11 +2,11 @@
 
 ## S3
 
-Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-guide) for maximal coverage and test against https://play.minio.io:9000/
+Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-guide) for maximum coverage. Testing against [play.minio.io](https://play.minio.io:9000/) as the default S3 backend.
 
 ## etcd
 
-As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we create a value `bar` for key `foo`:
+As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we populate etcd:
 
 ```bash
 $ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
@@ -14,14 +14,27 @@ $ curl etcd.mesos:1026/v2/keys/meh -XPUT -d value="some"
 $ curl etcd.mesos:1026/v2/keys/buz/meh -XPUT -d value="moar"
 ```
 
-TODO:
+Checking if values arrived:
 
-- local test env via docker
-- ref https://github.com/coreos/etcd/tree/master/client
+```bash
+$ curl etcd.mesos:1026/v2/keys/foo
+{
+  "action": "get",
+  "node": {
+    "key": "/foo",
+    "value": "bar",
+    "modifiedIndex": 8,
+    "createdIndex": 8
+  }
+}
+```
+
+- TODO: add local test env via Docker (as with ZK)
+- Using https://github.com/coreos/etcd/tree/master/client
 
 ## ZooKeeper
 
-The local test environment for ZooKeeper uses [mbabineau/zookeeper-exhibitor](https://hub.docker.com/r/mbabineau/zookeeper-exhibitor/).
+For a local ZK test environment you can use [mbabineau/zookeeper-exhibitor](https://hub.docker.com/r/mbabineau/zookeeper-exhibitor/).
 Note to replace `HOSTNAME=mh9` with the value for your host:
 
 ```bash
