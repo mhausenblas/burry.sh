@@ -123,6 +123,20 @@ INFO[0000] On node /meh                                  func=visitETCD
 INFO[0000] Added metadata to /tmp/1483193387             func=addmeta
 INFO[0000] Backup available in /tmp/1483193387.zip       func=arch
 INFO[0000] Operation successfully completed.             func=main
+
+$ ls -al *.zip
+-rw-r--r--@ 1 mhausenblas  staff  750 31 Dec 14:22 1483194168.zip
+
+$ unzip 1483194168.zip
+
+$ cat 1483194168/.burrymeta | jq .
+{
+  "snapshot-date": "2016-12-31T14:22:48Z",
+  "svc": "etcd",
+  "svc-endpoint": "etcd.mesos:1026",
+  "target": "local",
+  "target-endpoint": "/tmp"
+}
 ```
 
 ### Back up DC/OS system ZooKeeper to Amazon S3
