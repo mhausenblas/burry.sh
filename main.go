@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	VERSION             string = "0.1.0"
-	INFRA_SVC_EXHIBITOR string = "/exhibitor/v1/config/get-state"
-	BURRYFEST_FILE      string = ".burryfest"
+	VERSION        string = "0.1.0"
+	BURRYFEST_FILE string = ".burryfest"
 )
 
 var (
@@ -27,7 +26,7 @@ var (
 	endpoint string
 	// the storage target to use:
 	starget         string
-	STORAGE_TARGETS = [...]string{"tty", "local"}
+	STORAGE_TARGETS = [...]string{"tty", "local", "s3"}
 	// the backup and restore manifest to use:
 	brf      Burryfest
 	ErrNoBFF = errors.New("no manifest found")
@@ -62,10 +61,13 @@ func init() {
 		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
 	} else {
 		err := errors.New("")
-		if err, brf = loadbf(); err != nil {
+		bfpath := ""
+		if err, bfpath, brf = loadbf(); err != nil {
 			if err == ErrNoBFF {
 				brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
 			}
+		} else {
+			log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
 		}
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
@@ -94,5 +96,7 @@ func main() {
 		}
 	} else {
 		log.WithFields(log.Fields{"func": "init"}).Error(fmt.Sprintf("Operation completed with error(s), no burry manifest written."))
+		flag.Usage()
+		os.Exit(1)
 	}
 }

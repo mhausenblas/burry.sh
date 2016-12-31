@@ -25,29 +25,28 @@ type ExhibitorConfig struct {
 	SnapshotsDir string `json:"zookeeperDataDirectory"`
 }
 
-func loadbf() (error, Burryfest) {
+func loadbf() (error, string, Burryfest) {
 	brf = Burryfest{}
 	cwd, _ := os.Getwd()
 	bfpath, _ := filepath.Abs(filepath.Join(cwd, BURRYFEST_FILE))
 	if _, err := os.Stat(bfpath); err == nil { // a burryfest exists
 		if raw, ferr := ioutil.ReadFile(bfpath); ferr != nil {
-			return ferr, brf
+			return ferr, bfpath, brf
 		} else {
 			if merr := json.Unmarshal(raw, &brf); merr != nil {
-				return merr, brf
+				return merr, bfpath, brf
 			}
 		}
 	} else {
-		return ErrNoBFF, brf
+		return ErrNoBFF, bfpath, brf
 	}
-	return nil, brf
+	return nil, bfpath, brf
 }
 
 func writebf() error {
 	cwd, _ := os.Getwd()
 	bfpath, _ := filepath.Abs(filepath.Join(cwd, BURRYFEST_FILE))
 	if _, err := os.Stat(bfpath); err == nil {
-		log.WithFields(log.Fields{"func": "manifest"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
 		return nil
 	} else { // burryfest does not exist yet, init it:
 		if b, err := json.Marshal(brf); err != nil {

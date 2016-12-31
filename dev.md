@@ -1,8 +1,21 @@
+# Development and testing notes
+
+## S3
+
+Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-guide) for maximal coverage and test against https://play.minio.io:9000/
+
 ## etcd
+
+As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we create a value `bar` for key `foo`:
 
 ```bash
 $ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
 ```
+
+TODO:
+
+- local test env via docker
+- ref https://github.com/coreos/etcd/tree/master/client
 
 ## ZooKeeper
 
