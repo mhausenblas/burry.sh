@@ -36,9 +36,20 @@ Currently, only 'build from source' install is available (note: replace `GOOS=li
 
     $ go get github.com/mhausenblas/burry.sh
     $ GOOS=linux go build
-    $ godoc -http=":6060"
+    $ godoc -http=":6060" &
+    $ open http://localhost:6060/pkg/github.com/mhausenblas/burry.sh/
 
 ## Use
+
+The general usage is:
+
+```bash
+$ burry --endpoint IP:PORT (--isvc etcd|zk) (--target tty|local|s3) (--overwrite)
+```
+
+So, the only required parameter really is the `--endpoint`. When run the first time, `burry` creates a manifest file in the current directory called `.burryfest`, capturing all your settings. Subsequent invocations hence are simply `burry`, without any parameters. Use  `--overwrite` to temporarily overwrite parameters or remove the `.burryfest` file for permanent changes.
+
+All parameters:
 
 ```bash
 $ burry --help
@@ -57,13 +68,13 @@ Arguments:
         Display version information
 ```
 
-Policy is:
+Parameter reuse policy is  as follows:
 
 1. If no manifest `.burryfest` exists in the current directory, the command line parameters passed are used to create a manifest file.
 1. If a manifest `.burryfest` exists in the current directory it will be used, use `--overwrite` to temporarily overwrite parameters.
 1. For every storage target other than `tty` a new manifest in the timestamped archive file will be created.
 
-Examples usages of `burry` follow.
+Next we will have a look of some examples usages of `burry`.
 
 ### Back up DC/OS system ZooKeeper to Amazon S3
 
