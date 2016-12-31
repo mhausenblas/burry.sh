@@ -10,6 +10,8 @@ As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we cre
 
 ```bash
 $ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
+$ curl etcd.mesos:1026/v2/keys/meh -XPUT -d value="some"
+$ curl etcd.mesos:1026/v2/keys/buz/meh -XPUT -d value="moar"
 ```
 
 TODO:

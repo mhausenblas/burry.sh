@@ -32,12 +32,12 @@ func walkZK() bool {
 // and applies the reap function fn on the node
 // at the path if it is a leaf node
 func visitZK(conn zk.Conn, path string, fn reap) {
-	log.WithFields(log.Fields{"func": "visit"}).Info(fmt.Sprintf("On node %s", path))
+	log.WithFields(log.Fields{"func": "visitZK"}).Info(fmt.Sprintf("On node %s", path))
 	if children, _, err := conn.Children(path); err != nil {
-		log.WithFields(log.Fields{"func": "visit"}).Error(fmt.Sprintf("%s", err))
+		log.WithFields(log.Fields{"func": "visitZK"}).Error(fmt.Sprintf("%s", err))
 		return
 	} else {
-		log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
+		log.WithFields(log.Fields{"func": "visitZK"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
 		if len(children) > 0 { // there are children
 			for _, c := range children {
 				newpath := ""
@@ -46,12 +46,12 @@ func visitZK(conn zk.Conn, path string, fn reap) {
 				} else {
 					newpath = strings.Join([]string{path, c}, "/")
 				}
-				log.WithFields(log.Fields{"func": "visit"}).Debug(fmt.Sprintf("Next visiting child %s", newpath))
+				log.WithFields(log.Fields{"func": "visitZK"}).Debug(fmt.Sprintf("Next visiting child %s", newpath))
 				visitZK(conn, newpath, fn)
 			}
 		} else { // we're on a leaf node
 			if val, _, err := conn.Get(path); err != nil {
-				log.WithFields(log.Fields{"func": "visit"}).Error(fmt.Sprintf("%s", err))
+				log.WithFields(log.Fields{"func": "visitZK"}).Error(fmt.Sprintf("%s", err))
 			} else {
 				fn(path, string(val))
 			}

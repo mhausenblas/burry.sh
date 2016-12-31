@@ -11,6 +11,9 @@ import (
 // walkETCD walks an etcd tree, applying
 // a reap function per node
 func walkETCD() bool {
+	if brf.Endpoint == "" {
+		return false
+	}
 	cfg := client.Config{
 		Endpoints:               []string{"http://" + brf.Endpoint},
 		Transport:               client.DefaultTransport,
@@ -18,10 +21,14 @@ func walkETCD() bool {
 	}
 	c, _ := client.New(cfg)
 	kapi := client.NewKeysAPI(c)
-	if resp, err := kapi.Get(context.Background(), "/foo", nil); err != nil {
-		log.WithFields(log.Fields{"func": "rekey"}).Error(fmt.Sprintf("%s", err))
-	} else {
-		log.WithFields(log.Fields{"func": "rekey"}).Info(fmt.Sprintf("metadata: %v, value: %q\n", resp, resp.Node.Value))
+	// use the etcd API to visit each node and store
+	// the values in the local filesystem:
+	visitETCD(kapi, "/", rekey)
+	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
+		// create an archive file of the node's values:
+		res := arch()
+		// transfer to remote, if applicable:
+		remote(res)
 	}
 	return true
 }
@@ -29,7 +36,26 @@ func walkETCD() bool {
 // visitETCD visits a path in the etcd tree
 // and applies the reap function fn on the node
 // at the path if it is a leaf node
-func visitETCD(path string, fn reap) {
+func visitETCD(kapi client.KeysAPI, path string, fn reap) {
+	log.WithFields(log.Fields{"func": "visitETCD"}).Info(fmt.Sprintf("On node %s", path))
+	copts := client.GetOptions{
+		Recursive: true,
+		Sort:      false,
+		Quorum:    true,
+	}
+	if resp, err := kapi.Get(context.Background(), path, &copts); err != nil {
+		log.WithFields(log.Fields{"func": "visitETCD"}).Error(fmt.Sprintf("%s", err))
+	} else {
+		if resp.Node.Dir { // there are children
+			log.WithFields(log.Fields{"func": "visitETCD"}).Debug(fmt.Sprintf("%s has %d children", path, len(resp.Node.Nodes)))
+			for _, node := range resp.Node.Nodes {
+				log.WithFields(log.Fields{"func": "visitETCD"}).Debug(fmt.Sprintf("Next visiting child %s", node.Key))
+				visitETCD(kapi, node.Key, fn)
+			}
+		} else { // we're on a leaf node
+			fn(resp.Node.Key, string(resp.Node.Value))
+		}
+	}
 }
 
 // rekey reaps an etcd key.

@@ -98,7 +98,8 @@ INFO[0008] Operation successfully completed.             func=main
 
 ```
 
+### Back up etcd to Amazon S3
 
-
-
-
+```bash
+$ ./burry.sh --endpoint etcd.mesos:1026 --isvc etcd
+```
