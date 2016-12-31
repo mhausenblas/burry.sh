@@ -19,16 +19,16 @@ critical infrastructure base services such as ZooKeeper and etcd.
 **) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
 ```
 
-Note that restoring infrastructure services from storage targets is NOT YET implemented.
+**Note that restoring infrastructure services from storage targets is NOT YET implemented.**
 
-## Architecture
+Contents:
 
-`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s algorithm is:
-
-- Walk the tree from the root
-- For every non-leaf node: process its children
-- For every leaf node, store the content (that is, the node value) 
-- Depending on the storage target selected, create archive incl. metadata
+- [Install](#install)
+- [Use](#use)
+  - Example: [Screen dump of local ZooKeeper content](#)
+  - Example: [Back up DC/OS system ZooKeeper to Amazon S3](#)
+  - Example: [Back up etcd to Minio](#)
+- [Architecture](#architecture)
 
 ## Install
 
@@ -146,7 +146,7 @@ INFO[0008] Operation successfully completed.             func=main
 
 ```
 
-### Back up etcd to Amazon S3
+### Back up etcd to Minio
 
 See the [development and testing](dev.md#etcd) notes for the test setup.
 
@@ -165,3 +165,12 @@ INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in Amazon S3  
 INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in Amazon S3  func=remoteS3
 INFO[0001] Operation successfully completed.             func=main
 ```
+
+## Architecture
+
+`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s algorithm is:
+
+- Walk the tree from the root
+- For every non-leaf node: process its children
+- For every leaf node, store the content (that is, the node value) 
+- Depending on the storage target selected, create archive incl. metadata
