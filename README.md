@@ -48,7 +48,7 @@ See also [GoDocs](https://godoc.org/github.com/mhausenblas/burry.sh).
 The general usage is:
 
 ```bash
-$ burry --endpoint IP:PORT (--isvc etcd|zk) (--target tty|local|s3) (--overwrite)
+$ burry --endpoint IP:PORT (--isvc etcd|zk) (--target tty|local|s3) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
 ```
 
 So, the only required parameter really is the `--endpoint`. When run the first time, `burry` creates a manifest file in the current directory called `.burryfest`, capturing all your settings. Subsequent invocations hence are simply `burry`, without any parameters. Use  `--overwrite` to temporarily overwrite parameters or remove the `.burryfest` file for permanent changes.
@@ -60,14 +60,16 @@ $ burry --help
 Usage: burry [args]
 
 Arguments:
+  -credentials string
+        The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=...
   -endpoint string
         The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor
   -isvc string
         The type of infra service to back up or restore. Supported values are [etcd zk] (default "zk")
   -overwrite
-        Command line values overwrite manifest values
+        Make command line values overwrite manifest values
   -target string
-        The storage target to use. Supported values are [local tty] (default "tty")
+        The storage target to use. Supported values are [local minio s3 tty] (default "tty")
   -version
         Display version information
 ```
