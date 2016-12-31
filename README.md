@@ -27,7 +27,7 @@ Contents:
 - [Use](#use)
   - Example: [Screen dump of local ZooKeeper content](#screen-dump-of-local-zookeeper-content)
   - Example: [Back up DC/OS system ZooKeeper to Amazon S3](#back-up-dcos-system-zookeeper-to-amazon-s3)
-  - Example: [Back up etcd to Minio](#https://github.com/mhausenblas/burry.sh#back-up-etcd-to-minio)
+  - Example: [Back up etcd to Minio](#back-up-etcd-to-minio)
 - [Architecture](#architecture)
 
 ## Install
