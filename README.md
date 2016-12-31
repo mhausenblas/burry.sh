@@ -1,7 +1,7 @@
 # burry
 
 This is `burry`, the BackUp & RecoveRY tool for cloud native infrastructure services. Use `burry` to back up and restore
-critical infrastructure base services such as ZooKeeper and etcd.
+critical infrastructure base services such as ZooKeeper and etcd. [More…](https://hackernoon.com/backup-recovery-of-infrastructure-services-200b2116930f)
 
 `burry` currently supports backing up the following infra services (`from`) into storage targets (`to`):
 
