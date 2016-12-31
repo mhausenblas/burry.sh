@@ -65,6 +65,8 @@ func init() {
 		if err, bfpath, brf = loadbf(); err != nil {
 			if err == ErrNoBFF {
 				brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
+			} else {
+				log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
 			}
 		} else {
 			log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
@@ -80,22 +82,21 @@ func main() {
 		about()
 		os.Exit(0)
 	}
+	if err := writebf(); err != nil {
+		log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
+	}
 	switch brf.InfraService {
 	case "zk":
 		success = walkZK()
 	case "etcd":
 		success = walkETCD()
 	default:
-		log.WithFields(log.Fields{"func": "rznode"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 	}
 	if success {
-		if err := writebf(); err != nil {
-			log.WithFields(log.Fields{"func": "walkZK"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
-		} else {
-			log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Operation successfully completed, burry manifest written."))
-		}
+		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed."))
 	} else {
-		log.WithFields(log.Fields{"func": "init"}).Error(fmt.Sprintf("Operation completed with error(s), no burry manifest written."))
+		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Operation completed with error(s)."))
 		flag.Usage()
 		os.Exit(1)
 	}

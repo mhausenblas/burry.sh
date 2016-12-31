@@ -64,6 +64,8 @@ func arch() string {
 	progress := func(apath string) {
 		log.WithFields(log.Fields{"func": "arch"}).Debug(fmt.Sprintf("%s", apath))
 	}
+	// add the current burry manifest file as metadata:
+	addbf(ipath)
 	if err := azip.ArchiveFile(ipath, opath, progress); err != nil {
 		log.WithFields(log.Fields{"func": "arch"}).Panic(fmt.Sprintf("%s", err))
 	} else {
