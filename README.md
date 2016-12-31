@@ -78,7 +78,32 @@ Parameter reuse policy is  as follows:
 
 1. If no manifest `.burryfest` exists in the current directory, the command line parameters passed are used to create a manifest file.
 1. If a manifest `.burryfest` exists in the current directory it will be used, use `--overwrite` to temporarily overwrite parameters.
-1. For every storage target other than `tty` a new manifest in the timestamped archive file will be created.
+
+An example of a burry manifest file looks like:
+
+```json
+{
+    "svc": "etcd",
+    "svc-endpoint": "etcd.mesos:1026",
+    "target": "local",
+    "credentials": {
+        "target-endpoint": "",
+        "params": {}
+    }
+}
+```
+
+Note that for every storage target other than `tty` a metadata file `.burrymeta` in the (timestamped) archive file will be created, something like:
+
+```json
+{
+  "snapshot-date": "2016-12-31T14:52:42Z",
+  "svc": "zk",
+  "svc-endpoint": "leader.mesos:2181",
+  "target": "s3",
+  "target-endpoint": "s3.amazonaws.com"
+}
+```
 
 Next we will have a look of some examples usages of `burry`.
 
