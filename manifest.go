@@ -4,26 +4,60 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Burryfest struct {
-	InfraService  string `json:"svc"`
-	Endpoint      string `json:"endpoint"`
-	StorageTarget string `json:"target"`
-	Credentials   string `json:"credentials"`
+	InfraService  string      `json:"svc"`
+	Endpoint      string      `json:"svc-endpoint"`
+	StorageTarget string      `json:"target"`
+	Creds         Credentials `json:"credentials"`
 }
 
-type ExhibitorState struct {
-	ExhibitorConfig ExhibitorConfig `json:"config"`
+type Credentials struct {
+	StorageTargetEndpoint string       `json:"target-endpoint"`
+	Params                []CredParams `json:"params"`
 }
 
-type ExhibitorConfig struct {
-	LogDir       string `json:"logIndexDirectory"`
-	SnapshotsDir string `json:"zookeeperDataDirectory"`
+type CredParams struct {
+	Key   string `json:"key"`
+	Value string `json:"val"`
+}
+
+type ArchMeta struct {
+	SnapshotDate          string `json:"snapshot-date"`
+	InfraService          string `json:"svc"`
+	Endpoint              string `json:"svc-endpoint"`
+	StorageTarget         string `json:"target"`
+	StorageTargetEndpoint string `json:"target-endpoint"`
+}
+
+// parsecred parses the cred string in the form:
+// STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn
+// into a Credentials variable
+func parsecred() Credentials {
+	c := Credentials{}
+	if cred == "" {
+		return c
+	}
+	raw := strings.Split(cred, ",")
+	params := []CredParams{}
+	// 2nd to end are cred params in key-value format:
+	for _, p := range raw[1:] {
+		p := CredParams{
+			Key:   strings.Split(p, "=")[0],
+			Value: strings.Split(p, "=")[1],
+		}
+		params = append(params, p)
+	}
+	c.StorageTargetEndpoint = raw[0]
+	c.Params = params
+	return c
 }
 
 // loadbf tries to load a JSON representation of the burry manifest
@@ -55,6 +89,7 @@ func writebf() error {
 	if _, err := os.Stat(bfpath); err == nil { // burryfest exists, bail out
 		return nil
 	} else { // burryfest does not exist yet, init it:
+		log.WithFields(log.Fields{"func": "writebf"}).Debug(fmt.Sprintf("With credentials %s", brf.Creds))
 		if b, err := json.Marshal(brf); err != nil {
 			return err
 		} else {
@@ -73,38 +108,34 @@ func writebf() error {
 	}
 }
 
-// addbf adds the current burry manifest file to the archive. note that this function and copyFileContents
-// are derived from http://stackoverflow.com/questions/21060945/simple-way-to-copy-a-file-in-golang/
-func addbf(dst string) (err error) {
-	cwd, _ := os.Getwd()
-	src, _ := filepath.Abs(filepath.Join(cwd, BURRYFEST_FILE))
-	log.WithFields(log.Fields{"func": "addbf"}).Info(fmt.Sprintf("Adding %s to %s", src, dst))
-	return copyFileContents(src, filepath.Join(dst, BURRYFEST_FILE))
-}
-
-// copyFileContents copies the contents of the file named src to the file named
-// by dst. The file will be created if it does not already exist. If the
-// destination file exists, all it's contents will be replaced by the contents
-// of the source file.
-func copyFileContents(src, dst string) (err error) {
-	in, err := os.Open(src)
-	if err != nil {
-		return
+// addmeta adds metadata to the archive.
+func addmeta(dst string) error {
+	mpath, _ := filepath.Abs(filepath.Join(dst, BURRYMETA_FILE))
+	basedi64, _ := strconv.ParseInt(based, 10, 64)
+	step := brf.Creds.StorageTargetEndpoint
+	if step == "" {
+		step, _ = os.Getwd()
 	}
-	defer in.Close()
-	out, err := os.Create(dst)
-	if err != nil {
-		return
+	m := ArchMeta{
+		SnapshotDate:          time.Unix(basedi64, 0).Format(time.RFC3339),
+		InfraService:          brf.InfraService,
+		Endpoint:              brf.Endpoint,
+		StorageTarget:         brf.StorageTarget,
+		StorageTargetEndpoint: step,
 	}
-	defer func() {
-		cerr := out.Close()
-		if err == nil {
-			err = cerr
+	if b, err := json.Marshal(m); err != nil {
+		return err
+	} else {
+		f, err := os.Create(mpath)
+		if err != nil {
+			return err
 		}
-	}()
-	if _, err = io.Copy(out, in); err != nil {
-		return
+		_, err = f.WriteString(string(b))
+		if err != nil {
+			return err
+		}
+		f.Sync()
+		log.WithFields(log.Fields{"func": "addmeta"}).Info(fmt.Sprintf("Added metadata to %s", dst))
+		return nil
 	}
-	err = out.Sync()
-	return
 }

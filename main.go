@@ -14,6 +14,7 @@ import (
 const (
 	VERSION        string = "0.1.0"
 	BURRYFEST_FILE string = ".burryfest"
+	BURRYMETA_FILE string = ".burrymeta"
 )
 
 var (
@@ -26,10 +27,11 @@ var (
 	endpoint string
 	// the storage target to use:
 	starget         string
-	STORAGE_TARGETS = [...]string{"tty", "local", "s3"}
+	STORAGE_TARGETS = [...]string{"tty", "local", "s3", "minio"}
 	// the backup and restore manifest to use:
 	brf      Burryfest
 	ErrNoBFF = errors.New("no manifest found")
+	cred     string
 	// local scratch base directory
 	based string
 )
@@ -48,6 +50,7 @@ func init() {
 	flag.StringVar(&isvc, "isvc", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
 	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
 	flag.StringVar(&starget, "target", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
+	flag.StringVar(&cred, "credentials", "", fmt.Sprintf("The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=..."))
 
 	flag.Usage = func() {
 		fmt.Printf("Usage: %s [args]\n\n", os.Args[0])
@@ -58,14 +61,15 @@ func init() {
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
 	}
+	c := parsecred()
 	if overwrite {
-		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
+		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: c}
 	} else {
 		err := errors.New("")
 		bfpath := ""
 		if err, bfpath, brf = loadbf(); err != nil {
 			if err == ErrNoBFF {
-				brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Credentials: ""}
+				brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: c}
 			} else {
 				log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
 			}

@@ -90,7 +90,7 @@ CONTAINER ID        IMAGE                                  COMMAND              
 
 $ DEBUG=true ./burry --endpoint localhost:2181
 INFO[0000] Using existing burry manifest file /home/core/.burryfest  func=init
-INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Credentials:}  func=init
+INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] On node /                                     func=visitZK
 2016/12/31 09:27:25 Connected to [::1]:2181
 2016/12/31 09:27:25 Authenticated: id=97189781074870273, timeout=4000
@@ -106,6 +106,24 @@ DEBU[0000]                                               func=reapsimple
 INFO[0000] Operation successfully completed.             func=main
 ```
 
+### Back up etcd to local storage 
+
+See the [development and testing](dev.md#etcd) notes for the test setup.
+
+```bash
+$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target local
+INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
+INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
+INFO[0000] On node /                                     func=visitETCD
+INFO[0000] On node /buz                                  func=visitETCD
+INFO[0000] On node /buz/meh                              func=visitETCD
+INFO[0000] On node /foo                                  func=visitETCD
+INFO[0000] On node /meh                                  func=visitETCD
+INFO[0000] Added metadata to /tmp/1483193387             func=addmeta
+INFO[0000] Backup available in /tmp/1483193387.zip       func=arch
+INFO[0000] Operation successfully completed.             func=main
+```
+
 ### Back up DC/OS system ZooKeeper to Amazon S3
 
 See the [development and testing](dev.md#zookeeper) notes for the test setup.
@@ -114,7 +132,7 @@ See the [development and testing](dev.md#zookeeper) notes for the test setup.
 # let's first do a dry run, that is, only dump to screen.
 # this works because the default value of --target is 'tty'
 $ ./burry --endpoint leader.mesos:2181
-INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Credentials:}  func=init
+INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
 INFO[0000] On node /                                     func=visit
 2016/12/31 06:20:07 Connected to 10.0.4.185:2181
@@ -124,15 +142,12 @@ INFO[0000] On node /mesos                                func=visit
 INFO[0006] /etcd/etcd_framework_id:                      func=rznode
 INFO[0006] Operation successfully completed.             func=main
 
-$ cat .burryfest
-{"svc":"zk","endpoint":"leader.mesos:2181","target":"tty","credentials":""}
-
 # now we know we can read stuff from ZK, let's get it
 # backed up into Amazon S3; you can either remove
 # .burryfest or use --overwrite to specify the new storage target
-$ ./burry --endpoint leader.mesos:2181 --target s3 --overwrite
-INFO[0008] Using existing burry manifest file /tmp/.burryfest  func=init
-INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Credentials:}  func=init
+$ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
+INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
 INFO[0000] On node /                                     func=visit
 2016/12/31 06:41:46 Connected to 10.0.4.185:2181
 2016/12/31 06:41:46 Authenticated: id=97172902550700682, timeout=4000
@@ -140,18 +155,17 @@ INFO[0000] On node /mesos                                func=visit
 ...
 INFO[0006] On node /etcd/etcd_framework_id               func=visit
 INFO[0006] Backup available in /tmp/1483166506.zip       func=arch
-INFO[0006] Trying to back up to zk-backup-1483166506/latest.zip in Amazon S3  func=remoteS3
-INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in Amazon S3  func=remoteS3
+INFO[0006] Trying to back up to zk-backup-1483166506/latest.zip in S3 compatible remote storage  func=remoteS3
+INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
 INFO[0008] Operation successfully completed.             func=main
-
 ```
 
-### Back up etcd to Minio
+### Back up etcd to Minio 
 
-See the [development and testing](dev.md#etcd) notes for the test setup.
+See the [development and testing](dev.md#etcd) notes for the test setup. Note: the credentials used below are from the public [Minio playground](https://play.minio.io:9000/).
 
 ```bash
-$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target s3
+$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
 INFO[0000] On node /                                     func=visitETCD
@@ -161,8 +175,8 @@ INFO[0000] On node /buz                                  func=visitETCD
 INFO[0000] On node /buz/meh                              func=visitETCD
 INFO[0000] Adding /tmp/.burryfest to /tmp/1483173687     func=addbf
 INFO[0000] Backup available in /tmp/1483173687.zip       func=arch
-INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in Amazon S3  func=remoteS3
-INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in Amazon S3  func=remoteS3
+INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in S3 compatible remote storage  func=remoteS3
+INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in S3 compatible remote storage play.minio.io:9000  func=remoteS3
 INFO[0001] Operation successfully completed.             func=main
 ```
 
