@@ -50,6 +50,7 @@ func init() {
 	sort.Strings(sst)
 	flag.BoolVar(&version, "version", false, "Display version information")
 	flag.BoolVar(&overwrite, "overwrite", false, "Make command line values overwrite manifest values")
+	flag.StringVar(&bop, "operation", BOPS[0], fmt.Sprintf("The operation to carry out. Supported values are %v", BOPS))
 	flag.StringVar(&isvc, "isvc", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
 	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
 	flag.StringVar(&starget, "target", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
@@ -61,7 +62,7 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("ENDPOINT %s", endpoint))
+	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Selected operation: %s", bop))
 
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
@@ -84,13 +85,6 @@ func init() {
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
 	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
-	if flag.NArg() < 1 {
-		about()
-		flag.Usage()
-		os.Exit(1)
-	} else {
-		bop = flag.Args()[0]
-	}
 }
 
 func main() {
@@ -99,10 +93,6 @@ func main() {
 		about()
 		os.Exit(0)
 	}
-	if err := writebf(); err != nil {
-		log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
-	}
-
 	switch bop {
 	case BOPS[0]: // backup
 		switch brf.InfraService {
@@ -130,6 +120,9 @@ func main() {
 	}
 
 	if success {
+		if err := writebf(); err != nil {
+			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
+		}
 		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed."))
 	} else {
 		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Operation completed with error(s)."))
