@@ -97,16 +97,16 @@ func main() {
 	case BOPS[0]: // backup
 		switch brf.InfraService {
 		case "zk":
-			success = walkZK()
+			success = backupZK()
 		case "etcd":
-			success = walkETCD()
+			success = backupETCD()
 		default:
 			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
 	case BOPS[1]: // restore
 		switch brf.InfraService {
 		case "zk":
-			success = true
+			success = restoreZK()
 		case "etcd":
 			success = true
 			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Restoring etcd is not yet implemented"))

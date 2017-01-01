@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// walkETCD walks an etcd tree, applying
+// backupETCD walks an etcd tree, applying
 // a reap function per leaf node visited
-func walkETCD() bool {
+func backupETCD() bool {
 	if brf.Endpoint == "" {
 		return false
 	}
@@ -28,7 +28,7 @@ func walkETCD() bool {
 		// create an archive file of the node's values:
 		res := arch()
 		// transfer to remote, if applicable:
-		remote(res)
+		toremote(res)
 	}
 	return true
 }

@@ -9,9 +9,9 @@ import (
 	"strings"
 )
 
-// remote uploads the local ZIP archive to a
+// toremote uploads the local ZIP archive to a
 // remote storage target such as S3 or Minio
-func remote(localarch string) {
+func toremote(localarch string) {
 	stidx := lookupst(brf.StorageTarget)
 	switch {
 	case stidx == 0, stidx == 1: // either TTY or local storage so we're done

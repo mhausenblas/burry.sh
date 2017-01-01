@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// walkZK walks a ZooKeeper tree, applying
+// backupZK walks a ZooKeeper tree, applying
 // a reap function per leaf node visited
-func walkZK() bool {
+func backupZK() bool {
 	if brf.Endpoint == "" {
 		return false
 	}
@@ -23,7 +23,7 @@ func walkZK() bool {
 		// create an archive file of the node's values:
 		res := arch()
 		// transfer to remote, if applicable:
-		remote(res)
+		toremote(res)
 	}
 	return true
 }
@@ -56,5 +56,20 @@ func visitZK(conn zk.Conn, path string, fn reap) {
 				fn(path, string(val))
 			}
 		}
+	}
+}
+
+func restoreZK() bool {
+	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
+		// transfer from remote, if applicable:
+
+		// unarchive:
+
+		// traverse directory and insert as per strategy:
+		//  diff: only non-existing nodes will be inserted
+		//  complete: overwrite existing nodes
+		return true
+	} else { // can't restore from TTY
+		return false
 	}
 }
