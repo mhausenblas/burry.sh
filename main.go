@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	VERSION        string = "0.1.0"
+	VERSION        string = "0.2.0"
 	BURRYFEST_FILE string = ".burryfest"
 	BURRYMETA_FILE string = ".burrymeta"
 )
@@ -20,6 +20,9 @@ const (
 var (
 	version   bool
 	overwrite bool
+	// the operation burry should to carry out:
+	bop  string
+	BOPS = [...]string{"backup", "restore"}
 	// the type of infra service to back up or restore:
 	isvc           string
 	INFRA_SERVICES = [...]string{"etcd", "zk"}
@@ -53,11 +56,13 @@ func init() {
 	flag.StringVar(&cred, "credentials", "", fmt.Sprintf("The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=..."))
 
 	flag.Usage = func() {
-		fmt.Printf("Usage: %s [args]\n\n", os.Args[0])
+		fmt.Printf("Usage: burry %s|%s [args]\n\n", BOPS[0], BOPS[1])
 		fmt.Println("Arguments:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("ENDPOINT %s", endpoint))
+
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
 	}
@@ -79,6 +84,13 @@ func init() {
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
 	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
+	if flag.NArg() < 1 {
+		about()
+		flag.Usage()
+		os.Exit(1)
+	} else {
+		bop = flag.Args()[0]
+	}
 }
 
 func main() {
@@ -90,14 +102,33 @@ func main() {
 	if err := writebf(); err != nil {
 		log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
 	}
-	switch brf.InfraService {
-	case "zk":
-		success = walkZK()
-	case "etcd":
-		success = walkETCD()
+
+	switch bop {
+	case BOPS[0]: // backup
+		switch brf.InfraService {
+		case "zk":
+			success = walkZK()
+		case "etcd":
+			success = walkETCD()
+		default:
+			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		}
+	case BOPS[1]: // restore
+		switch brf.InfraService {
+		case "zk":
+			success = true
+		case "etcd":
+			success = true
+			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Restoring etcd is not yet implemented"))
+		default:
+			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		}
 	default:
-		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("%s is not a valid operation", bop))
+		flag.Usage()
+		os.Exit(2)
 	}
+
 	if success {
 		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed."))
 	} else {

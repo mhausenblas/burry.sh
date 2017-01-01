@@ -37,7 +37,7 @@ func walkETCD() bool {
 // and applies the reap function fn on the node
 // at the path if it is a leaf node
 func visitETCD(kapi client.KeysAPI, path string, fn reap) {
-	log.WithFields(log.Fields{"func": "visitETCD"}).Info(fmt.Sprintf("On node %s", path))
+	log.WithFields(log.Fields{"func": "visitETCD"}).Debug(fmt.Sprintf("On node %s", path))
 	copts := client.GetOptions{
 		Recursive: true,
 		Sort:      false,

@@ -32,7 +32,7 @@ func walkZK() bool {
 // and applies the reap function fn on the node
 // at the path if it is a leaf node
 func visitZK(conn zk.Conn, path string, fn reap) {
-	log.WithFields(log.Fields{"func": "visitZK"}).Info(fmt.Sprintf("On node %s", path))
+	log.WithFields(log.Fields{"func": "visitZK"}).Debug(fmt.Sprintf("On node %s", path))
 	if children, _, err := conn.Children(path); err != nil {
 		log.WithFields(log.Fields{"func": "visitZK"}).Error(fmt.Sprintf("%s", err))
 		return
