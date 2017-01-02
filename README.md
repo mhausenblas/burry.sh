@@ -5,14 +5,14 @@ critical infrastructure base services such as ZooKeeper and etcd. [More…](http
 
 `burry` currently supports the following infra services and storage targets:
 
-|                |ZooKeeper   |etcd        |
-| --------------:| ---------- | ---------- |
-| Amazon S3      | B/R        | B/R        |
-| Azure Storage  | []/[]      | []/[]      |
-| Google Storage | []/[]      | []/[       |
-| Local          | B/R        | B/R        |
-| Minio*         | B/R        | B/R        |
-| TTY**          | B/-        | B/-        |
+|                |ZooKeeper   |etcd    | Consul   |
+| --------------:| ---------- | ------ | -------- |
+| Amazon S3      | B/R        | B/R    | []/[]    |
+| Azure Storage  | []/[]      | []/[]  | []/[]    |
+| Google Storage | []/[]      | []/[]  | []/[]    |
+| Local          | B/R        | B/R    | []/[]    |
+| Minio*         | B/R        | B/R    | []/[]    |
+| TTY**          | B/-        | B/-    | []/-     |
 
 ```
  B  ... backups supported
