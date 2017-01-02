@@ -38,6 +38,8 @@ var (
 	cred     string
 	// local scratch base directory
 	based string
+	// the snapshot ID
+	snapshotid string
 )
 
 // reap function types take a node path
@@ -56,6 +58,7 @@ func init() {
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
 	flag.StringVarP(&starget, "target", "t", "tty", fmt.Sprintf("The storage target to use.\n\tSupported values are %v", sst))
 	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=..."))
+	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
 
 	flag.Usage = func() {
 		fmt.Printf("Usage: burry [args]\n\n")
@@ -84,6 +87,11 @@ func init() {
 		}
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
+	if snapshotid == "" {
+		snapshotid = based
+	} else {
+		based = snapshotid
+	}
 }
 
 func main() {
@@ -125,7 +133,7 @@ func main() {
 		if err := writebf(); err != nil {
 			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
 		}
-		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed."))
+		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. The snapshot ID is: %s", snapshotid))
 	} else {
 		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Operation completed with error(s)."))
 		flag.Usage()

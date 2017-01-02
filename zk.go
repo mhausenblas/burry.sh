@@ -21,9 +21,9 @@ func backupZK() bool {
 	visitZK(*conn, "/", reapsimple)
 	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
 		// create an archive file of the node's values:
-		res := arch()
+		a := arch()
 		// transfer to remote, if applicable:
-		toremote(res)
+		toremote(a)
 	}
 	return true
 }
@@ -62,9 +62,9 @@ func visitZK(conn zk.Conn, path string, fn reap) {
 func restoreZK() bool {
 	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
 		// transfer from remote, if applicable:
-
+		a := fromremote()
 		// unarchive:
-
+		unarch(a)
 		// traverse directory and insert as per strategy:
 		//  diff: only non-existing nodes will be inserted
 		//  complete: overwrite existing nodes

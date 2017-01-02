@@ -95,3 +95,22 @@ func arch() string {
 	}
 	return opath
 }
+
+// unarch creates a directory with content of the snapshot
+// based on the ZIP archive from an earlier backup operation
+func unarch(localarch string) {
+	cwd, _ := os.Getwd()
+	ipath := localarch
+	defer func() {
+		_ = os.Remove(localarch)
+	}()
+	opath := cwd
+	progress := func(apath string) {
+		log.WithFields(log.Fields{"func": "unarch"}).Debug(fmt.Sprintf("%s", apath))
+	}
+	if err := azip.UnarchiveFile(ipath, opath, progress); err != nil {
+		log.WithFields(log.Fields{"func": "unarch"}).Panic(fmt.Sprintf("%s", err))
+	} else {
+		log.WithFields(log.Fields{"func": "unarch"}).Info(fmt.Sprintf("Backup restored in %s", opath))
+	}
+}
