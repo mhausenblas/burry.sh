@@ -43,6 +43,8 @@ var (
 	based string
 	// the snapshot ID
 	snapshotid string
+	// number of restored entries
+	numrestored int
 )
 
 // reap function types take a node path
@@ -95,6 +97,7 @@ func init() {
 	} else {
 		based = snapshotid
 	}
+	numrestored = 0
 }
 
 func main() {
@@ -136,7 +139,12 @@ func main() {
 		if err := writebf(); err != nil {
 			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
 		}
-		log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. The snapshot ID is: %s", snapshotid))
+		switch bop {
+		case BOPS[0]:
+			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. The snapshot ID is: %s", snapshotid))
+		case BOPS[1]:
+			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. Restored %d entries", numrestored))
+		}
 	} else {
 		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Operation completed with error(s)."))
 		flag.Usage()

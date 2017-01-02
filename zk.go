@@ -71,13 +71,11 @@ func restoreZK() bool {
 		defer func() {
 			_ = os.RemoveAll(s)
 		}()
-		// traverse directory and insert as per strategy:
-		//  diff: only non-existing nodes will be inserted
-		//  complete: overwrite existing nodes
 		zks := []string{brf.Endpoint}
 		zkconn, _, _ = zk.Connect(zks, time.Second)
 		// walk the snapshot directory and use the ZK API to
-		// restore znodes from the local filesystem:
+		// restore znodes from the local filesystem - note that
+		// only non-existing znodes will be created:
 		if err := filepath.Walk(s, visitZKReverse); err != nil {
 			log.WithFields(log.Fields{"func": "restoreZK"}).Error(fmt.Sprintf("%s", err))
 			return false
@@ -102,7 +100,7 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 			return err
 		} else {
 			if pathpresent {
-				log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("znode %s exists already", znode))
+				log.WithFields(log.Fields{"func": "visitZKReverse"}).Debug(fmt.Sprintf("znode %s exists already, skipping it", znode))
 			} else {
 				if f.IsDir() {
 					cfile, _ := filepath.Abs(filepath.Join(path, CONTENT_FILE))
@@ -116,7 +114,9 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 								log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", zerr))
 								return zerr
 							} else {
-								log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("Created leaf znode %s", znode))
+								log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("Restored %s", znode))
+								log.WithFields(log.Fields{"func": "visitZKReverse"}).Debug(fmt.Sprintf("Value: %s", c))
+								numrestored = numrestored + 1
 							}
 						}
 					} else {
@@ -125,7 +125,8 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 							log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", err))
 							return zerr
 						} else {
-							log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("Created non-leaf znode %s", znode))
+							log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("Restored %s", znode))
+							numrestored = numrestored + 1
 						}
 					}
 				}
