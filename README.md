@@ -29,10 +29,13 @@ Note: **this is WIP, please use with care. Only non-existing nodes or keys will 
 
 - [Install](#install)
 - [Use](#use)
-  - Example: [Screen dump of local ZooKeeper content](#screen-dump-of-local-zookeeper-content)
-  - Example: [Back up etcd to local storage](#back-up-etcd-to-local-storage)
-  - Example: [Back up DC/OS system ZooKeeper to Amazon S3](#back-up-dcos-system-zookeeper-to-amazon-s3)
-  - Example: [Back up etcd to Minio](#back-up-etcd-to-minio)
+  - [Backups](#backups)
+    - Example: [Screen dump of local ZooKeeper content](#screen-dump-of-local-zookeeper-content)
+    - Example: [Back up etcd to local storage](#back-up-etcd-to-local-storage)
+    - Example: [Back up DC/OS system ZooKeeper to Amazon S3](#back-up-dcos-system-zookeeper-to-amazon-s3)
+    - Example: [Back up etcd to Minio](#back-up-etcd-to-minio)
+  - [Restores](#restores)
+    - Example: [Restore etcd from local storage](#restore-etcd-from-local-storage)
 - [Architecture](#architecture)
 
 ## Install
@@ -52,38 +55,35 @@ See also [GoDocs](https://godoc.org/github.com/mhausenblas/burry.sh).
 The general usage is:
 
 ```bash
-$ burry --endpoint IP:PORT (--operation backup|restore) (--isvc etcd|zk) (--target tty|local|s3) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
-```
-
-So, the only required parameter for a backup operation is the `--endpoint`. When run the first time, `burry` creates a manifest file in the current directory called `.burryfest`, capturing all your settings. Subsequent invocations hence are simply `burry`, without any parameters. Use  `--overwrite` to temporarily overwrite parameters or remove the `.burryfest` file for permanent changes.
-
-All parameters:
-
-```bash
 $ burry --help
 Usage: burry [args]
 
 Arguments:
   -c, --credentials string
-        The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=...
+        The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
+        Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
   -e, --endpoint string
-        The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor
+        The infra service HTTP API endpoint to use.
+        Example: localhost:8181 for Exhibitor
   -i, --isvc string
-        The type of infra service to back up or restore. Supported values are [etcd zk] (default "zk")
+        The type of infra service to back up or restore.
+        Supported values are [etcd zk] (default "zk")
   -o, --operation string
-        The operation to carry out. Supported values are [backup restore] (default "backup")
+        The operation to carry out.
+        Supported values are [backup restore] (default "backup")
   -w, --overwrite
-        Make command line values overwrite manifest values
+        Make command line values overwrite manifest values.
+  -s, --snapshot string
+        The ID of the snapshot.
+        Example: 1483193387
   -t, --target string
-        The storage target to use. Supported values are [local minio s3 tty] (default "tty")
+        The storage target to use.
+        Supported values are [local minio s3 tty] (default "tty")
   -v, --version
-        Display version information
+        Display version information and exit.
 ```
 
-Parameter reuse policy is  as follows:
-
-1. If no manifest `.burryfest` exists in the current directory, the command line parameters passed are used to create a manifest file.
-1. If a manifest `.burryfest` exists in the current directory it will be used, use `--overwrite` to temporarily overwrite parameters.
+When run the first time, `burry` creates a manifest file in the current directory called `.burryfest`, capturing all your settings. If a manifest `.burryfest` exists in the current directory subsequent invocations use this and hence you can simply execute `burry`, without any parameters. Use  `--overwrite` to temporarily overwrite command line parameters or remove the `.burryfest` file for permanent changes.
 
 An example of a burry manifest file looks like:
 
@@ -111,9 +111,15 @@ Note that for every storage target other than `tty` a metadata file `.burrymeta`
 }
 ```
 
-Next we will have a look of some examples usages of `burry`.
+### Backups
 
-### Screen dump of local ZooKeeper content
+In general, since `--operation backup` is the default, the only required parameter for a backup operation is the `--endpoint`, that is, the HTTP API of the ZooKeeper or etcd you want to back up.
+
+```bash
+$ burry --endpoint IP:PORT (--operation backup) (--isvc etcd|zk) (--target tty|local|s3) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
+```
+
+#### Screen dump of local ZooKeeper content
 
 See the [development and testing](dev.md#zookeeper) notes for the test setup.
 
@@ -125,22 +131,11 @@ CONTAINER ID        IMAGE                                  COMMAND              
 $ DEBUG=true ./burry --endpoint localhost:2181
 INFO[0000] Using existing burry manifest file /home/core/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
-INFO[0000] On node /                                     func=visitZK
-2016/12/31 09:27:25 Connected to [::1]:2181
-2016/12/31 09:27:25 Authenticated: id=97189781074870273, timeout=4000
-DEBU[0000] / has 1 children                              func=visitZK
-DEBU[0000] Next visiting child /zookeeper                func=visitZK
-INFO[0000] On node /zookeeper                            func=visitZK
-DEBU[0000] /zookeeper has 1 children                     func=visitZK
-DEBU[0000] Next visiting child /zookeeper/quota          func=visitZK
-INFO[0000] On node /zookeeper/quota                      func=visitZK
-DEBU[0000] /zookeeper/quota has 0 children               func=visitZK
 INFO[0000] /zookeeper/quota:                             func=reapsimple
-DEBU[0000]                                               func=reapsimple
 INFO[0000] Operation successfully completed.             func=main
 ```
 
-### Back up etcd to local storage 
+#### Back up etcd to local storage 
 
 See the [development and testing](dev.md#etcd) notes for the test setup.
 
@@ -148,11 +143,6 @@ See the [development and testing](dev.md#etcd) notes for the test setup.
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target local
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
-INFO[0000] On node /                                     func=visitETCD
-INFO[0000] On node /buz                                  func=visitETCD
-INFO[0000] On node /buz/meh                              func=visitETCD
-INFO[0000] On node /foo                                  func=visitETCD
-INFO[0000] On node /meh                                  func=visitETCD
 INFO[0000] Added metadata to /tmp/1483193387             func=addmeta
 INFO[0000] Backup available in /tmp/1483193387.zip       func=arch
 INFO[0000] Operation successfully completed.             func=main
@@ -172,7 +162,7 @@ $ cat 1483194168/.burrymeta | jq .
 }
 ```
 
-### Back up DC/OS system ZooKeeper to Amazon S3
+#### Back up DC/OS system ZooKeeper to Amazon S3
 
 See the [development and testing](dev.md#zookeeper) notes for the test setup.
 
@@ -182,12 +172,6 @@ See the [development and testing](dev.md#zookeeper) notes for the test setup.
 $ ./burry --endpoint leader.mesos:2181
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
-INFO[0000] On node /                                     func=visit
-2016/12/31 06:20:07 Connected to 10.0.4.185:2181
-2016/12/31 06:20:07 Authenticated: id=97172902550700662, timeout=4000
-INFO[0000] On node /mesos                                func=visit
-...
-INFO[0006] /etcd/etcd_framework_id:                      func=rznode
 INFO[0006] Operation successfully completed.             func=main
 
 # now we know we can read stuff from ZK, let's get it
@@ -196,19 +180,13 @@ INFO[0006] Operation successfully completed.             func=main
 $ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
-INFO[0000] On node /                                     func=visit
-2016/12/31 06:41:46 Connected to 10.0.4.185:2181
-2016/12/31 06:41:46 Authenticated: id=97172902550700682, timeout=4000
-INFO[0000] On node /mesos                                func=visit
-...
-INFO[0006] On node /etcd/etcd_framework_id               func=visit
 INFO[0006] Backup available in /tmp/1483166506.zip       func=arch
 INFO[0006] Trying to back up to zk-backup-1483166506/latest.zip in S3 compatible remote storage  func=remoteS3
 INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
 INFO[0008] Operation successfully completed.             func=main
 ```
 
-### Back up etcd to Minio 
+#### Back up etcd to Minio 
 
 See the [development and testing](dev.md#etcd) notes for the test setup. Note: the credentials used below are from the public [Minio playground](https://play.minio.io:9000/).
 
@@ -216,11 +194,6 @@ See the [development and testing](dev.md#etcd) notes for the test setup. Note: t
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
-INFO[0000] On node /                                     func=visitETCD
-INFO[0000] On node /foo                                  func=visitETCD
-INFO[0000] On node /meh                                  func=visitETCD
-INFO[0000] On node /buz                                  func=visitETCD
-INFO[0000] On node /buz/meh                              func=visitETCD
 INFO[0000] Adding /tmp/.burryfest to /tmp/1483173687     func=addbf
 INFO[0000] Backup available in /tmp/1483173687.zip       func=arch
 INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in S3 compatible remote storage  func=remoteS3
@@ -228,11 +201,51 @@ INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in 
 INFO[0001] Operation successfully completed.             func=main
 ```
 
+
+### Restores
+
+For restores you MUST set `--operation restore` as well as provide a `--snapshot` ID and note that you CAN NOT restore from screen, that is, `--target tty` is an invalid choice:
+
+```bash
+$ burry --operation restore --snapshot ID --target local|s3 (--isvc etcd|zk) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
+```
+
+#### Restore etcd from local storage 
+
+See the [development and testing](dev.md#etcd) notes for the test setup.
+
+```bash
+# let's first back up etcd:
+$ ./burry -e etcd.mesos:1026 -i etcd -t local
+INFO[0000] Selected operation: BACKUP                    func=init
+INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
+INFO[0000] Added metadata to /tmp/1483383204  func=addmeta
+INFO[0000] Backup available in /tmp/1483383204.zip  func=arch
+INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
+INFO[0000] Operation successfully completed. The snapshot ID is: 1483383204  func=main
+# now, let's destroy a key:
+$ curl etcd.mesos:1026/v2/keys/foo -XDELETE
+{"action":"delete","node":{"key":"/foo","modifiedIndex":16,"createdIndex":15},"prevNode":{"key":"/foo","value":"bar","modifiedIndex":15,"createdIndex":15}}
+# ... and restore it from the backup:
+$ ./burry -o restore -s 1483383204
+INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] Selected operation: RESTORE                   func=init
+INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
+INFO[0000] Backup restored in /tmp  func=unarch
+INFO[0000] Restored /foo                                 func=visitETCDReverse
+INFO[0000] Operation successfully completed. Restored 1 items from snapshot 1483383204  func=main
+# ... and we're back to normal:
+$ curl 10.0.1.139:1026/v2/keys/foo
+{"action":"get","node":{"key":"/foo","value":"bar","modifiedIndex":17,"createdIndex":17}}
+```
+
 ## Architecture
 
-`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s algorithm is:
+`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s backup algorithm is:
 
 - Walk the tree from the root
 - For every non-leaf node: process its children
 - For every leaf node, store the content (that is, the node value) 
 - Depending on the storage target selected, create archive incl. metadata
+
+The restore algorithm: TBD.

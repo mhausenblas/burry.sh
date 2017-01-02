@@ -24,6 +24,9 @@ Use:
         Supported values are [backup restore] (default "backup")
   -w, --overwrite
         Make command line values overwrite manifest values.
+  -s, --snapshot string
+        The ID of the snapshot.
+        Example: 1483193387
   -t, --target string
         The storage target to use.
         Supported values are [local minio s3 tty] (default "tty")
