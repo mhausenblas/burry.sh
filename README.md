@@ -3,23 +3,27 @@
 This is `burry`, the BackUp & RecoveRY tool for cloud native infrastructure services. Use `burry` to back up and restore
 critical infrastructure base services such as ZooKeeper and etcd. [More…](https://hackernoon.com/backup-recovery-of-infrastructure-services-200b2116930f)
 
-`burry` currently supports backing up the following infra services (`from`) into storage targets (`to`):
+`burry` currently supports the following infra services and storage targets:
 
-|to/from         |ZooKeeper   |etcd        |
+|                |ZooKeeper   |etcd        |
 | --------------:| ---------- | ---------- |
-| Amazon S3      | yes        | yes        |
-| Azure Storage  | backlog    | backlog    |
-| Google Storage | backlog    | backlog    |
-| Local          | yes        | yes        |
-| Minio*         | yes        | yes        |
-| TTY**          | yes        | yes        |
+| Amazon S3      | B/R        | B/-        |
+| Azure Storage  | []/[]      | []/[]      |
+| Google Storage | []/[]      | []/[       |
+| Local          | B/R        | B/-        |
+| Minio*         | B/R        | B/-        |
+| TTY**          | B/-        | B/-        |
 
 ```
+ B  ... backups supported
+ R  ... restores supported
+ -  ... not applicable
+ [] ... not yet implemented
  *) Minio can be either on-premises or in the cloud, but always self-hosted. See also https://www.minio.io
 **) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
 ```
 
-Note: this is WIP, please use with care.
+Note: **this is WIP, please use with care. Only non-existing nodes or keys will be restored, that is, no existing data in ZK or etcd will be overwritten when attempting to restore data**.
 
 **Contents:**
 
