@@ -4,6 +4,7 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	azip "github.com/pierrre/archivefile/zip"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,4 +113,19 @@ func unarch(localarch string) string {
 		log.WithFields(log.Fields{"func": "unarch"}).Info(fmt.Sprintf("Backup restored in %s", opath))
 	}
 	return filepath.Join(cwd, based, "/")
+}
+
+// readc reads a file from the specified path and
+// returns its content as a byte slice
+func readc(path string) ([]byte, error) {
+	c := []byte{}
+	if _, ferr := os.Stat(path); ferr != nil {
+		return c, ferr
+	} else { // content file exists
+		if c, rerr := ioutil.ReadFile(path); rerr != nil {
+			return c, rerr
+		} else {
+			return c, nil
+		}
+	}
 }

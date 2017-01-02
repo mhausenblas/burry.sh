@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
+	etcd "github.com/coreos/etcd/client"
 	flag "github.com/ogier/pflag"
 	"github.com/samuel/go-zookeeper/zk"
 	"os"
@@ -32,6 +33,7 @@ var (
 	// the infra service endpoint to use:
 	endpoint string
 	zkconn   *zk.Conn
+	kapi     etcd.KeysAPI
 	// the storage target to use:
 	starget         string
 	STORAGE_TARGETS = [...]string{"tty", "local", "s3", "minio"}
@@ -124,8 +126,7 @@ func main() {
 		case "zk":
 			success = restoreZK()
 		case "etcd":
-			success = true
-			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Restoring etcd is not yet implemented"))
+			success = restoreETCD()
 		default:
 			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
@@ -143,7 +144,7 @@ func main() {
 		case BOPS[0]:
 			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. The snapshot ID is: %s", snapshotid))
 		case BOPS[1]:
-			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. Restored %d entries", numrestored))
+			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. Restored %d items from snapshot %s", numrestored, snapshotid))
 		}
 	} else {
 		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Operation completed with error(s)."))

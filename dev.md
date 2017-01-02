@@ -6,12 +6,15 @@ Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-
 
 ## etcd
 
-As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we populate etcd:
+As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we can update etcd as follows:
 
 ```bash
+# add keys:
 $ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
 $ curl etcd.mesos:1026/v2/keys/meh -XPUT -d value="some"
 $ curl etcd.mesos:1026/v2/keys/buz/meh -XPUT -d value="moar"
+# remove key:
+$ curl etcd.mesos:1026/v2/keys/buz/meh -XDELETE
 ```
 
 Checking if values arrived:

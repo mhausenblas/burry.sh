@@ -4,7 +4,6 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/samuel/go-zookeeper/zk"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +72,7 @@ func restoreZK() bool {
 		}()
 		zks := []string{brf.Endpoint}
 		zkconn, _, _ = zk.Connect(zks, time.Second)
+		zkconn.SetLogger(log.StandardLogger())
 		// walk the snapshot directory and use the ZK API to
 		// restore znodes from the local filesystem - note that
 		// only non-existing znodes will be created:
@@ -110,7 +110,7 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 							log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", cerr))
 							return cerr
 						} else {
-							if _, zerr := zkconn.Create(znode, c, 0, zk.WorldACL(zk.PermAll)); err != nil {
+							if _, zerr := zkconn.Create(znode, c, 0, zk.WorldACL(zk.PermAll)); zerr != nil {
 								log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", zerr))
 								return zerr
 							} else {
@@ -121,8 +121,8 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 						}
 					} else {
 						log.WithFields(log.Fields{"func": "visitZKReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as a non-leaf znode", znode))
-						if _, zerr := zkconn.Create(znode, []byte{}, 0, zk.WorldACL(zk.PermAll)); err != nil {
-							log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", err))
+						if _, zerr := zkconn.Create(znode, []byte{}, 0, zk.WorldACL(zk.PermAll)); zerr != nil {
+							log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", zerr))
 							return zerr
 						} else {
 							log.WithFields(log.Fields{"func": "visitZKReverse"}).Info(fmt.Sprintf("Restored %s", znode))
@@ -135,17 +135,4 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 		log.WithFields(log.Fields{"func": "visitZKReverse"}).Debug(fmt.Sprintf("Visited %s", znode))
 	}
 	return nil
-}
-
-func readc(path string) ([]byte, error) {
-	c := []byte{}
-	if _, ferr := os.Stat(path); ferr != nil {
-		return c, ferr
-	} else { // content file exists
-		if c, rerr := ioutil.ReadFile(path); rerr != nil {
-			return c, rerr
-		} else {
-			return c, nil
-		}
-	}
 }
