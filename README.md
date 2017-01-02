@@ -7,11 +7,11 @@ critical infrastructure base services such as ZooKeeper and etcd. [More…](http
 
 |                |ZooKeeper   |etcd        |
 | --------------:| ---------- | ---------- |
-| Amazon S3      | B/R        | B/-        |
+| Amazon S3      | B/R        | B/R        |
 | Azure Storage  | []/[]      | []/[]      |
 | Google Storage | []/[]      | []/[       |
-| Local          | B/R        | B/-        |
-| Minio*         | B/R        | B/-        |
+| Local          | B/R        | B/R        |
+| Minio*         | B/R        | B/R        |
 | TTY**          | B/-        | B/-        |
 
 ```
