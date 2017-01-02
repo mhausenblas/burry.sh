@@ -19,9 +19,9 @@ critical infrastructure base services such as ZooKeeper and etcd. [More…](http
 **) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
 ```
 
-**Note that restoring infrastructure services from storage targets is NOT YET implemented.**
+Note: this is WIP, please use with care.
 
-Contents:
+**Contents:**
 
 - [Install](#install)
 - [Use](#use)

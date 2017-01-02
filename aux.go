@@ -54,13 +54,14 @@ func store(path string, val string) {
 		log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Rewriting root"))
 		fpath, _ = filepath.Abs(filepath.Join(cwd, based))
 	} else {
+		// escape ":" so that we have no issues storing it in the filesystem
 		fpath, _ = filepath.Abs(filepath.Join(cwd, based, strings.Replace(path, ":", "BURRY_ESC_COLON", -1)))
 	}
 	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
 		log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", err))
 		return
 	} else {
-		cpath, _ := filepath.Abs(filepath.Join(fpath, "content"))
+		cpath, _ := filepath.Abs(filepath.Join(fpath, CONTENT_FILE))
 		if c, cerr := os.Create(cpath); cerr != nil {
 			log.WithFields(log.Fields{"func": "store"}).Error(fmt.Sprintf("%s", cerr))
 		} else {
@@ -98,12 +99,9 @@ func arch() string {
 
 // unarch creates a directory with content of the snapshot
 // based on the ZIP archive from an earlier backup operation
-func unarch(localarch string) {
+func unarch(localarch string) string {
 	cwd, _ := os.Getwd()
 	ipath := localarch
-	defer func() {
-		_ = os.Remove(localarch)
-	}()
 	opath := cwd
 	progress := func(apath string) {
 		log.WithFields(log.Fields{"func": "unarch"}).Debug(fmt.Sprintf("%s", apath))
@@ -113,4 +111,5 @@ func unarch(localarch string) {
 	} else {
 		log.WithFields(log.Fields{"func": "unarch"}).Info(fmt.Sprintf("Backup restored in %s", opath))
 	}
+	return filepath.Join(cwd, based, "/")
 }

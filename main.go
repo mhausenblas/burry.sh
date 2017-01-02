@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	flag "github.com/ogier/pflag"
+	"github.com/samuel/go-zookeeper/zk"
 	"os"
 	"sort"
 	"strconv"
@@ -16,6 +17,7 @@ const (
 	VERSION        string = "0.2.0"
 	BURRYFEST_FILE string = ".burryfest"
 	BURRYMETA_FILE string = ".burrymeta"
+	CONTENT_FILE   string = "content"
 )
 
 var (
@@ -29,6 +31,7 @@ var (
 	INFRA_SERVICES = [...]string{"etcd", "zk"}
 	// the infra service endpoint to use:
 	endpoint string
+	zkconn   *zk.Conn
 	// the storage target to use:
 	starget         string
 	STORAGE_TARGETS = [...]string{"tty", "local", "s3", "minio"}
