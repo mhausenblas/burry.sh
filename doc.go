@@ -6,7 +6,32 @@ dumps via the --target tty parameter.
 
 Use:
 
- $ burry --endpoint IP:PORT (--isvc etcd|zk) (--target tty|local|s3) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
+ $ burry [args]
+
+ With [args]:
+
+  -c, --credentials string
+        The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
+        Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
+  -e, --endpoint string
+        The infra service HTTP API endpoint to use.
+        Example: localhost:8181 for Exhibitor
+  -i, --isvc string
+        The type of infra service to back up or restore.
+        Supported values are [etcd zk] (default "zk")
+  -o, --operation string
+        The operation to carry out.
+        Supported values are [backup restore] (default "backup")
+  -w, --overwrite
+        Make command line values overwrite manifest values.
+  -t, --target string
+        The storage target to use.
+        Supported values are [local minio s3 tty] (default "tty")
+  -v, --version
+        Display version information and exit.
+
+Note that for a backup operation (-o backup) the endpoint (-e XXX) is mandatory and
+for a restore operation (-o restore) in addition the storage target (-t YYY) is mandatory.
 
 Examples:
 

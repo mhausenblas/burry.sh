@@ -60,17 +60,19 @@ $ burry --help
 Usage: burry [args]
 
 Arguments:
-  -credentials string
+  -c, --credentials string
         The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=...
-  -endpoint string
+  -e, --endpoint string
         The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor
-  -isvc string
+  -i, --isvc string
         The type of infra service to back up or restore. Supported values are [etcd zk] (default "zk")
-  -overwrite
+  -o, --operation string
+        The operation to carry out. Supported values are [backup restore] (default "backup")
+  -w, --overwrite
         Make command line values overwrite manifest values
-  -target string
+  -t, --target string
         The storage target to use. Supported values are [local minio s3 tty] (default "tty")
-  -version
+  -v, --version
         Display version information
 ```
 

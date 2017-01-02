@@ -49,13 +49,13 @@ type reap func(string, string)
 func init() {
 	sst := STORAGE_TARGETS[:]
 	sort.Strings(sst)
-	flag.BoolVarP(&version, "version", "v", false, "Display version information")
-	flag.BoolVarP(&overwrite, "overwrite", "w", false, "Make command line values overwrite manifest values")
-	flag.StringVarP(&bop, "operation", "o", BOPS[0], fmt.Sprintf("The operation to carry out. Supported values are %v", BOPS))
-	flag.StringVarP(&isvc, "isvc", "i", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
-	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
-	flag.StringVarP(&starget, "target", "t", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
-	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=..."))
+	flag.BoolVarP(&version, "version", "v", false, "Display version information and exit.")
+	flag.BoolVarP(&overwrite, "overwrite", "w", false, "Make command line values overwrite manifest values.")
+	flag.StringVarP(&bop, "operation", "o", BOPS[0], fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", BOPS))
+	flag.StringVarP(&isvc, "isvc", "i", "zk", fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", INFRA_SERVICES))
+	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
+	flag.StringVarP(&starget, "target", "t", "tty", fmt.Sprintf("The storage target to use.\n\tSupported values are %v", sst))
+	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=..."))
 
 	flag.Usage = func() {
 		fmt.Printf("Usage: burry [args]\n\n")
