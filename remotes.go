@@ -17,14 +17,14 @@ func toremote(localarch string) {
 	case stidx == 0, stidx == 1: // either TTY or local storage so we're done
 		return
 	case stidx == 2, stidx == 3: // S3 compativle remote storage
-		remoteS3(localarch)
+		toremoteS3(localarch)
 	default:
 		log.WithFields(log.Fields{"func": "remote"}).Fatal(fmt.Sprintf("Storage target %s unknown or not yet supported", brf.StorageTarget))
 	}
 }
 
-// remoteS3 handles S3 compatible (remote) storage targets
-func remoteS3(localarch string) {
+// toremoteS3 handles storing an archive in S3 compatible (remote) storage targets
+func toremoteS3(localarch string) {
 	defer func() {
 		_ = os.Remove(localarch)
 	}()

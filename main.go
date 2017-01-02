@@ -2,12 +2,13 @@ package main
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
+	flag "github.com/ogier/pflag"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,21 +49,20 @@ type reap func(string, string)
 func init() {
 	sst := STORAGE_TARGETS[:]
 	sort.Strings(sst)
-	flag.BoolVar(&version, "version", false, "Display version information")
-	flag.BoolVar(&overwrite, "overwrite", false, "Make command line values overwrite manifest values")
-	flag.StringVar(&bop, "operation", BOPS[0], fmt.Sprintf("The operation to carry out. Supported values are %v", BOPS))
-	flag.StringVar(&isvc, "isvc", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
-	flag.StringVar(&endpoint, "endpoint", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
-	flag.StringVar(&starget, "target", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
-	flag.StringVar(&cred, "credentials", "", fmt.Sprintf("The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=..."))
+	flag.BoolVarP(&version, "version", "v", false, "Display version information")
+	flag.BoolVarP(&overwrite, "overwrite", "w", false, "Make command line values overwrite manifest values")
+	flag.StringVarP(&bop, "operation", "o", BOPS[0], fmt.Sprintf("The operation to carry out. Supported values are %v", BOPS))
+	flag.StringVarP(&isvc, "isvc", "i", "zk", fmt.Sprintf("The type of infra service to back up or restore. Supported values are %v", INFRA_SERVICES))
+	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use. Example: localhost:8181 for Exhibitor"))
+	flag.StringVarP(&starget, "target", "t", "tty", fmt.Sprintf("The storage target to use. Supported values are %v", sst))
+	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use. Example: s3.amazonaws.com,ACCESSKEYID=...,SECRETACCESSKEY=..."))
 
 	flag.Usage = func() {
-		fmt.Printf("Usage: burry %s|%s [args]\n\n", BOPS[0], BOPS[1])
+		fmt.Printf("Usage: burry [args]\n\n")
 		fmt.Println("Arguments:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Selected operation: %s", bop))
 
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
@@ -84,7 +84,6 @@ func init() {
 		}
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
-	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
 }
 
 func main() {
@@ -93,6 +92,9 @@ func main() {
 		about()
 		os.Exit(0)
 	}
+	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Selected operation: %s", strings.ToUpper(bop)))
+	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
+
 	switch bop {
 	case BOPS[0]: // backup
 		switch brf.InfraService {
