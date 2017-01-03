@@ -18,13 +18,13 @@ func about() {
 // based on a name (or -1 if not known)
 func lookupst(name string) int {
 	switch strings.ToLower(name) {
-	case "tty":
+	case STORAGE_TARGET_TTY:
 		return 0
-	case "local":
+	case STORAGE_TARGET_LOCAL:
 		return 1
-	case "s3":
+	case STORAGE_TARGET_S3:
 		return 2
-	case "minio":
+	case STORAGE_TARGET_MINIO:
 		return 3
 	default:
 		return -1
@@ -47,7 +47,8 @@ func reapsimple(path string, val string) {
 	}
 }
 
-// store stores the value val at the path path in the local filesystem
+// store stores value val at path path
+// in the local filesystem
 func store(path string, val string) {
 	cwd, _ := os.Getwd()
 	fpath := ""
@@ -55,7 +56,7 @@ func store(path string, val string) {
 		log.WithFields(log.Fields{"func": "store"}).Info(fmt.Sprintf("Rewriting root"))
 		fpath, _ = filepath.Abs(filepath.Join(cwd, based))
 	} else {
-		// escape ":" so that we have no issues storing it in the filesystem
+		// escape ":" in the path so that we have no issues storing it in the filesystem:
 		fpath, _ = filepath.Abs(filepath.Join(cwd, based, strings.Replace(path, ":", "BURRY_ESC_COLON", -1)))
 	}
 	if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
@@ -76,8 +77,7 @@ func store(path string, val string) {
 	}
 }
 
-// arch creates a ZIP archive of the current timestamped
-// local backup that store() has generated
+// arch creates a ZIP archive of snapshot that store() has generated
 func arch() string {
 	defer func() {
 		_ = os.RemoveAll(based)
@@ -93,12 +93,12 @@ func arch() string {
 	if err := azip.ArchiveFile(ipath, opath, progress); err != nil {
 		log.WithFields(log.Fields{"func": "arch"}).Panic(fmt.Sprintf("%s", err))
 	} else {
-		log.WithFields(log.Fields{"func": "arch"}).Info(fmt.Sprintf("Backup available in %s", opath))
+		log.WithFields(log.Fields{"func": "arch"}).Debug(fmt.Sprintf("Backup available in %s", opath))
 	}
 	return opath
 }
 
-// unarch creates a directory with content of the snapshot
+// unarch creates a directory with contents of the snapshot
 // based on the ZIP archive from an earlier backup operation
 func unarch(localarch string) string {
 	cwd, _ := os.Getwd()
@@ -110,7 +110,7 @@ func unarch(localarch string) string {
 	if err := azip.UnarchiveFile(ipath, opath, progress); err != nil {
 		log.WithFields(log.Fields{"func": "unarch"}).Panic(fmt.Sprintf("%s", err))
 	} else {
-		log.WithFields(log.Fields{"func": "unarch"}).Info(fmt.Sprintf("Backup restored in %s", opath))
+		log.WithFields(log.Fields{"func": "unarch"}).Debug(fmt.Sprintf("Backup restored in %s", opath))
 	}
 	return filepath.Join(cwd, based, "/")
 }

@@ -15,10 +15,20 @@ import (
 )
 
 const (
-	VERSION        string = "0.2.0"
-	BURRYFEST_FILE string = ".burryfest"
-	BURRYMETA_FILE string = ".burrymeta"
-	CONTENT_FILE   string = "content"
+	VERSION                 string = "0.3.0"
+	BURRYFEST_FILE          string = ".burryfest"
+	BURRYMETA_FILE          string = ".burrymeta"
+	CONTENT_FILE            string = "content"
+	BURRY_OPERATION_BACKUP  string = "backup"
+	BURRY_OPERATION_RESTORE string = "restore"
+	INFRA_SERVICE_ETCD      string = "etcd"
+	INFRA_SERVICE_ZK        string = "zk"
+	STORAGE_TARGET_TTY      string = "tty"
+	STORAGE_TARGET_LOCAL    string = "local"
+	STORAGE_TARGET_S3       string = "s3"
+	STORAGE_TARGET_MINIO    string = "minio"
+	REMOTE_ARCH_FILE        string = "latest.zip"
+	REMOTE_ARCH_TYPE        string = "application/zip"
 )
 
 var (
@@ -26,26 +36,31 @@ var (
 	overwrite bool
 	// the operation burry should to carry out:
 	bop  string
-	BOPS = [...]string{"backup", "restore"}
+	BOPS = [...]string{BURRY_OPERATION_BACKUP, BURRY_OPERATION_RESTORE}
 	// the type of infra service to back up or restore:
 	isvc           string
-	INFRA_SERVICES = [...]string{"etcd", "zk"}
+	INFRA_SERVICES = [...]string{INFRA_SERVICE_ETCD, INFRA_SERVICE_ZK}
 	// the infra service endpoint to use:
 	endpoint string
 	zkconn   *zk.Conn
 	kapi     etcd.KeysAPI
 	// the storage target to use:
 	starget         string
-	STORAGE_TARGETS = [...]string{"tty", "local", "s3", "minio"}
+	STORAGE_TARGETS = [...]string{
+		STORAGE_TARGET_TTY,
+		STORAGE_TARGET_LOCAL,
+		STORAGE_TARGET_S3,
+		STORAGE_TARGET_MINIO,
+	}
 	// the backup and restore manifest to use:
 	brf      Burryfest
 	ErrNoBFF = errors.New("no manifest found")
 	cred     string
-	// local scratch base directory
+	// local scratch base directory:
 	based string
-	// the snapshot ID
+	// the snapshot ID:
 	snapshotid string
-	// number of restored entries
+	// number of restored items (znodes or keys):
 	numrestored int
 )
 
@@ -60,10 +75,10 @@ func init() {
 	sort.Strings(sst)
 	flag.BoolVarP(&version, "version", "v", false, "Display version information and exit.")
 	flag.BoolVarP(&overwrite, "overwrite", "w", false, "Make command line values overwrite manifest values.")
-	flag.StringVarP(&bop, "operation", "o", BOPS[0], fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", BOPS))
-	flag.StringVarP(&isvc, "isvc", "i", "zk", fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", INFRA_SERVICES))
+	flag.StringVarP(&bop, "operation", "o", BURRY_OPERATION_BACKUP, fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", BOPS))
+	flag.StringVarP(&isvc, "isvc", "i", INFRA_SERVICE_ZK, fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", INFRA_SERVICES))
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
-	flag.StringVarP(&starget, "target", "t", "tty", fmt.Sprintf("The storage target to use.\n\tSupported values are %v", sst))
+	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", sst))
 	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=..."))
 	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
 
@@ -94,16 +109,44 @@ func init() {
 		}
 	}
 	based = strconv.FormatInt(time.Now().Unix(), 10)
-	if snapshotid == "" {
+	if snapshotid == "" { // for backup ops
 		snapshotid = based
-	} else {
+	} else { // for restore ops
 		based = snapshotid
 	}
 	numrestored = 0
 }
 
-func main() {
+func processop() bool {
 	success := false
+	switch bop {
+	case BURRY_OPERATION_BACKUP:
+		switch brf.InfraService {
+		case INFRA_SERVICE_ZK:
+			success = backupZK()
+		case INFRA_SERVICE_ETCD:
+			success = backupETCD()
+		default:
+			log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		}
+	case BURRY_OPERATION_RESTORE:
+		switch brf.InfraService {
+		case INFRA_SERVICE_ZK:
+			success = restoreZK()
+		case INFRA_SERVICE_ETCD:
+			success = restoreETCD()
+		default:
+			log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+		}
+	default:
+		log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("%s is not a valid operation", bop))
+		flag.Usage()
+		os.Exit(2)
+	}
+	return success
+}
+
+func main() {
 	if version {
 		about()
 		os.Exit(0)
@@ -111,39 +154,14 @@ func main() {
 	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Selected operation: %s", strings.ToUpper(bop)))
 	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
 
-	switch bop {
-	case BOPS[0]: // backup
-		switch brf.InfraService {
-		case "zk":
-			success = backupZK()
-		case "etcd":
-			success = backupETCD()
-		default:
-			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
-		}
-	case BOPS[1]: // restore
-		switch brf.InfraService {
-		case "zk":
-			success = restoreZK()
-		case "etcd":
-			success = restoreETCD()
-		default:
-			log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
-		}
-	default:
-		log.WithFields(log.Fields{"func": "main"}).Error(fmt.Sprintf("%s is not a valid operation", bop))
-		flag.Usage()
-		os.Exit(2)
-	}
-
-	if success {
+	if ok := processop(); ok {
 		if err := writebf(); err != nil {
 			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
 		}
 		switch bop {
-		case BOPS[0]:
+		case BURRY_OPERATION_BACKUP:
 			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. The snapshot ID is: %s", snapshotid))
-		case BOPS[1]:
+		case BURRY_OPERATION_RESTORE:
 			log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Operation successfully completed. Restored %d items from snapshot %s", numrestored, snapshotid))
 		}
 	} else {

@@ -29,21 +29,11 @@ func toremoteS3(localarch string) {
 		_ = os.Remove(localarch)
 	}()
 	endpoint := brf.Creds.StorageTargetEndpoint
-	accessKeyID := ""
-	secretAccessKey := ""
-	for _, p := range brf.Creds.Params {
-		if p.Key == "AWS_ACCESS_KEY_ID" {
-			accessKeyID = p.Value
-		}
-		if p.Key == "AWS_SECRET_ACCESS_KEY" {
-			secretAccessKey = p.Value
-		}
-	}
+	accessKeyID, secretAccessKey := extractS3cred()
 	useSSL := true
 	_, f := filepath.Split(localarch)
 	bucket := brf.InfraService + "-backup-" + strings.TrimSuffix(f, filepath.Ext(f))
-	object := "latest.zip"
-	ctype := "application/zip"
+	object := REMOTE_ARCH_FILE
 
 	log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Trying to back up to %s/%s in S3 compatible remote storage", bucket, object))
 	if mc, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL); err != nil {
@@ -58,7 +48,7 @@ func toremoteS3(localarch string) {
 				log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s", err))
 			}
 		}
-		if nbytes, err := mc.FPutObject(bucket, object, localarch, ctype); err != nil {
+		if nbytes, err := mc.FPutObject(bucket, object, localarch, REMOTE_ARCH_TYPE); err != nil {
 			log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s", err))
 		} else {
 			log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Successfully stored %s/%s (%d Bytes) in S3 compatible remote storage %s", bucket, object, nbytes, endpoint))
@@ -88,16 +78,7 @@ func fromremoteS3() string {
 	cwd, _ := os.Getwd()
 	localarch := filepath.Join(cwd, based+".zip")
 	endpoint := brf.Creds.StorageTargetEndpoint
-	accessKeyID := ""
-	secretAccessKey := ""
-	for _, p := range brf.Creds.Params {
-		if p.Key == "AWS_ACCESS_KEY_ID" {
-			accessKeyID = p.Value
-		}
-		if p.Key == "AWS_SECRET_ACCESS_KEY" {
-			secretAccessKey = p.Value
-		}
-	}
+	accessKeyID, secretAccessKey := extractS3cred()
 	useSSL := true
 	bucket := brf.InfraService + "-backup-" + snapshotid
 	object := "latest.zip"
