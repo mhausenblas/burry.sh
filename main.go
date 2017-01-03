@@ -4,10 +4,10 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	etcd "github.com/coreos/etcd/client"
+	consul "github.com/hashicorp/consul/api"
 	flag "github.com/ogier/pflag"
 	"github.com/samuel/go-zookeeper/zk"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +22,7 @@ const (
 	BURRY_OPERATION_RESTORE string = "restore"
 	INFRA_SERVICE_ETCD      string = "etcd"
 	INFRA_SERVICE_ZK        string = "zk"
+	INFRA_SERVICE_CONSUL    string = "consul"
 	STORAGE_TARGET_TTY      string = "tty"
 	STORAGE_TARGET_LOCAL    string = "local"
 	STORAGE_TARGET_S3       string = "s3"
@@ -38,11 +39,12 @@ var (
 	BOPS = [...]string{BURRY_OPERATION_BACKUP, BURRY_OPERATION_RESTORE}
 	// the type of infra service to back up or restore:
 	isvc           string
-	INFRA_SERVICES = [...]string{INFRA_SERVICE_ETCD, INFRA_SERVICE_ZK}
+	INFRA_SERVICES = [...]string{INFRA_SERVICE_ZK, INFRA_SERVICE_ETCD, INFRA_SERVICE_CONSUL}
 	// the infra service endpoint to use:
 	endpoint string
 	zkconn   *zk.Conn
 	kapi     etcd.KeysAPI
+	ckv      *consul.KV
 	// the storage target to use:
 	starget         string
 	STORAGE_TARGETS = [...]string{
@@ -69,14 +71,12 @@ var (
 type reap func(string, string)
 
 func init() {
-	sst := STORAGE_TARGETS[:]
-	sort.Strings(sst)
 	flag.BoolVarP(&version, "version", "v", false, "Display version information and exit.")
 	flag.BoolVarP(&createburryfest, "burryfest", "b", false, fmt.Sprintf("Create a burry manifest file %s in the current directory.\n\tThe manifest file captures the current command line parameters for re-use in subsequent operations.", BURRYFEST_FILE))
 	flag.StringVarP(&bop, "operation", "o", BURRY_OPERATION_BACKUP, fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", BOPS))
 	flag.StringVarP(&isvc, "isvc", "i", INFRA_SERVICE_ZK, fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", INFRA_SERVICES))
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
-	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", sst))
+	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", STORAGE_TARGETS))
 	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=..."))
 	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
 
@@ -121,6 +121,8 @@ func processop() bool {
 			success = backupZK()
 		case INFRA_SERVICE_ETCD:
 			success = backupETCD()
+		case INFRA_SERVICE_CONSUL:
+			success = backupCONSUL()
 		default:
 			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
