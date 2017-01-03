@@ -99,10 +99,12 @@ func init() {
 	}
 
 	based = strconv.FormatInt(time.Now().Unix(), 10)
-	if snapshotid == "" { // for backup ops
+	if bop == BURRY_OPERATION_BACKUP {
 		snapshotid = based
 	} else { // for restore ops
-		based = snapshotid
+		if snapshotid != "" {
+			based = snapshotid
+		}
 	}
 	numrestored = 0
 }
@@ -127,7 +129,11 @@ func processop() bool {
 			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
 	case BURRY_OPERATION_RESTORE:
-		if snapshotid == based {
+		if brf.StorageTarget == STORAGE_TARGET_TTY {
+			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("I can't restore from TTY, pick a different storage target with -t/--target"))
+			return false
+		}
+		if snapshotid == "" {
 			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("You MUST supply a snapshot ID with -s/--snapshot"))
 			return false
 		}
@@ -136,6 +142,8 @@ func processop() bool {
 			success = restoreZK()
 		case INFRA_SERVICE_ETCD:
 			success = restoreETCD()
+		case INFRA_SERVICE_CONSUL:
+			success = restoreCONSUL()
 		default:
 			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}

@@ -7,7 +7,7 @@ import (
 	consul "github.com/hashicorp/consul/api"
 	"os"
 	"path/filepath"
-	// "strings"
+	"strings"
 )
 
 // backupCONSUL walks an etcd tree, applying
@@ -44,17 +44,19 @@ func visitCONSUL(path string, fn reap) {
 	if children, _, err := ckv.Keys(path, ",", &qopts); err != nil {
 		log.WithFields(log.Fields{"func": "visitCONSUL"}).Error(fmt.Sprintf("%s", err))
 	} else {
-		if len(children) > 1 { // there are children
+		if len(children) > 1 || path == "/" { // there are children
 			log.WithFields(log.Fields{"func": "visitCONSUL"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
 			for _, node := range children {
 				log.WithFields(log.Fields{"func": "visitCONSUL"}).Debug(fmt.Sprintf("Next visiting child %s", node))
 				visitCONSUL(node, fn)
 			}
 		} else { // we're on a leaf node
-			if node, _, err := ckv.Get(path, &qopts); err != nil {
-				log.WithFields(log.Fields{"func": "visitCONSUL"}).Error(fmt.Sprintf("%s", err))
-			} else {
-				fn("/"+node.Key, string(node.Value))
+			if path != "/" {
+				if node, _, err := ckv.Get(path, &qopts); err != nil {
+					log.WithFields(log.Fields{"func": "visitCONSUL"}).Error(fmt.Sprintf("%s", err))
+				} else {
+					fn("/"+node.Key, string(node.Value))
+				}
 			}
 		}
 	}
@@ -70,15 +72,15 @@ func restoreCONSUL() bool {
 			_ = os.RemoveAll(s)
 		}()
 		cfg := consul.Config{
-			Address: "http://" + brf.Endpoint,
+			Address: brf.Endpoint,
 		}
 		cclient, _ := consul.NewClient(&cfg)
 		ckv = cclient.KV()
-		// walk the snapshot directory and use the etcd API to
+		// walk the snapshot directory and use the Consul API to
 		// restore keys from the local filesystem - note that
 		// only non-existing keys will be created:
-		if err := filepath.Walk(s, visitETCDReverse); err != nil {
-			log.WithFields(log.Fields{"func": "restoreETCD"}).Error(fmt.Sprintf("%s", err))
+		if err := filepath.Walk(s, visitCONSULReverse); err != nil {
+			log.WithFields(log.Fields{"func": "restoreCONSUL"}).Error(fmt.Sprintf("%s", err))
 			return false
 		}
 	} else { // can't restore from TTY
@@ -88,37 +90,56 @@ func restoreCONSUL() bool {
 }
 
 func visitCONSULReverse(path string, f os.FileInfo, err error) error {
-	// if f.Name() == BURRYMETA_FILE || f.Name() == snapshotid {
-	// 	return nil
-	// } else {
-	// 	cwd, _ := os.Getwd()
-	// 	base, _ := filepath.Abs(filepath.Join(cwd, snapshotid))
-	// 	key, _ := filepath.Rel(base, path)
-	// 	// append the root "/" to make it a key and unescape ":"
-	// 	key = "/" + strings.Replace(key, "BURRY_ESC_COLON", ":", -1)
-	// 	if f.IsDir() {
-	// 		cfile, _ := filepath.Abs(filepath.Join(path, CONTENT_FILE))
-	// 		if _, eerr := os.Stat(cfile); eerr == nil { // there is a content file at this path
-	// 			log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as leaf key", key))
-	// 			if c, cerr := readc(cfile); cerr != nil {
-	// 				log.WithFields(log.Fields{"func": "visitETCDReverse"}).Error(fmt.Sprintf("%s", cerr))
-	// 				return cerr
-	// 			} else {
-	// 				if _, kerr := kapi.Set(context.Background(), key, string(c), &etcd.SetOptions{Dir: false, PrevExist: etcd.PrevNoExist}); kerr == nil {
-	// 					log.WithFields(log.Fields{"func": "visitETCDReverse"}).Info(fmt.Sprintf("Restored %s", key))
-	// 					log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Value: %s", c))
-	// 					numrestored = numrestored + 1
-	// 				}
-	// 			}
-	// 		} else {
-	// 			log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as a non-leaf key", key))
-	// 			if _, kerr := kapi.Set(context.Background(), key, "", &etcd.SetOptions{Dir: true, PrevExist: etcd.PrevNoExist}); kerr == nil {
-	// 				log.WithFields(log.Fields{"func": "visitETCDReverse"}).Info(fmt.Sprintf("Restored %s", key))
-	// 				numrestored = numrestored + 1
-	// 			}
-	// 		}
-	// 	}
-	// 	log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Visited %s", key))
-	// }
+	if f.Name() == BURRYMETA_FILE || f.Name() == snapshotid {
+		return nil
+	} else {
+		cwd, _ := os.Getwd()
+		base, _ := filepath.Abs(filepath.Join(cwd, snapshotid))
+		key, _ := filepath.Rel(base, path)
+		qopts := consul.QueryOptions{
+			RequireConsistent: true,
+		}
+		// unescape ":"
+		key = strings.Replace(key, "BURRY_ESC_COLON", ":", -1)
+		if f.IsDir() {
+			cfile, _ := filepath.Abs(filepath.Join(path, CONTENT_FILE))
+			if _, eerr := os.Stat(cfile); eerr == nil { // there is a content file at this path
+				log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as leaf key", key))
+				if c, cerr := readc(cfile); cerr != nil {
+					log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", cerr))
+					return cerr
+				} else {
+					if node, _, eerr := ckv.Get(key, &qopts); eerr != nil {
+						log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", eerr))
+					} else {
+						if node == nil { // key does not exist yet
+							p := &consul.KVPair{Key: key, Value: c}
+							if _, kerr := ckv.Put(p, nil); kerr != nil {
+								log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", kerr))
+							} else {
+								log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Info(fmt.Sprintf("Restored %s", key))
+								log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Value: %s", c))
+								numrestored = numrestored + 1
+							}
+						}
+					}
+				}
+			} else {
+				log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as a non-leaf key", key))
+				if node, _, eerr := ckv.Get(key, &qopts); eerr != nil {
+					log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", eerr))
+				} else {
+					if node == nil { // key does not exist yet
+						p := &consul.KVPair{Key: key, Value: nil}
+						if _, kerr := ckv.Put(p, nil); kerr == nil {
+							log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Info(fmt.Sprintf("Restored %s", key))
+							numrestored = numrestored + 1
+						}
+					}
+				}
+			}
+		}
+		log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Visited %s", key))
+	}
 	return nil
 }
