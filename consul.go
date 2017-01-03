@@ -24,12 +24,12 @@ func backupCONSUL() bool {
 	// use the Consul API to visit each node and store
 	// the values in the local filesystem:
 	visitCONSUL("/", reapsimple)
-	// if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
-	// 	// create an archive file of the node's values:
-	// 	res := arch()
-	// 	// transfer to remote, if applicable:
-	// 	toremote(res)
-	// }
+	if lookupst(brf.StorageTarget) > 0 { // non-TTY, actual storage
+		// create an archive file of the node's values:
+		res := arch()
+		// transfer to remote, if applicable:
+		toremote(res)
+	}
 	return true
 }
 
