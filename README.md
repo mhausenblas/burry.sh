@@ -142,12 +142,9 @@ See the [development and testing](dev.md#etcd) notes for the test setup.
 ```bash
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target local
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
-INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
-INFO[0000] Added metadata to /tmp/1483193387             func=addmeta
-INFO[0000] Backup available in /tmp/1483193387.zip       func=arch
-INFO[0000] Operation successfully completed.             func=main
+INFO[0000] Operation successfully completed. The snapshot ID is: 1483194168  func=main
 
-$ ls -al *.zip
+$ ls -al 1483194168.zip
 -rw-r--r--@ 1 mhausenblas  staff  750 31 Dec 14:22 1483194168.zip
 
 $ unzip 1483194168.zip
@@ -171,7 +168,6 @@ See the [development and testing](dev.md#zookeeper) notes for the test setup.
 # this works because the default value of --target is 'tty'
 $ ./burry --endpoint leader.mesos:2181
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
-INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
 INFO[0006] Operation successfully completed.             func=main
 
 # now we know we can read stuff from ZK, let's get it
@@ -180,8 +176,6 @@ INFO[0006] Operation successfully completed.             func=main
 $ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
-INFO[0006] Backup available in /tmp/1483166506.zip       func=arch
-INFO[0006] Trying to back up to zk-backup-1483166506/latest.zip in S3 compatible remote storage  func=remoteS3
 INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
 INFO[0008] Operation successfully completed.             func=main
 ```
@@ -194,13 +188,9 @@ See the [development and testing](dev.md#etcd) notes for the test setup. Note: t
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
-INFO[0000] Adding /tmp/.burryfest to /tmp/1483173687     func=addbf
-INFO[0000] Backup available in /tmp/1483173687.zip       func=arch
-INFO[0000] Trying to back up to etcd-backup-1483173687/latest.zip in S3 compatible remote storage  func=remoteS3
 INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in S3 compatible remote storage play.minio.io:9000  func=remoteS3
 INFO[0001] Operation successfully completed.             func=main
 ```
-
 
 ### Restores
 
@@ -219,9 +209,6 @@ See the [development and testing](dev.md#etcd) notes for the test setup.
 $ ./burry -e etcd.mesos:1026 -i etcd -t local
 INFO[0000] Selected operation: BACKUP                    func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
-INFO[0000] Added metadata to /tmp/1483383204  func=addmeta
-INFO[0000] Backup available in /tmp/1483383204.zip  func=arch
-INFO[0000] Created burry manifest file /tmp/.burryfest  func=writebf
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483383204  func=main
 # now, let's destroy a key:
 $ curl etcd.mesos:1026/v2/keys/foo -XDELETE
@@ -231,7 +218,6 @@ $ ./burry -o restore -s 1483383204
 INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
 INFO[0000] Selected operation: RESTORE                   func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
-INFO[0000] Backup restored in /tmp  func=unarch
 INFO[0000] Restored /foo                                 func=visitETCDReverse
 INFO[0000] Operation successfully completed. Restored 1 items from snapshot 1483383204  func=main
 # ... and we're back to normal:

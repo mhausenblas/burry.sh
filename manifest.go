@@ -117,7 +117,7 @@ func writebf() error {
 				return err
 			}
 			f.Sync()
-			log.WithFields(log.Fields{"func": "writebf"}).Info(fmt.Sprintf("Created burry manifest file %s", bfpath))
+			log.WithFields(log.Fields{"func": "writebf"}).Debug(fmt.Sprintf("Created burry manifest file %s", bfpath))
 			return nil
 		}
 	}
@@ -150,7 +150,7 @@ func addmeta(dst string) error {
 			return err
 		}
 		f.Sync()
-		log.WithFields(log.Fields{"func": "addmeta"}).Info(fmt.Sprintf("Added metadata to %s", dst))
+		log.WithFields(log.Fields{"func": "addmeta"}).Debug(fmt.Sprintf("Added metadata to %s", dst))
 		return nil
 	}
 }

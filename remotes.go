@@ -35,7 +35,7 @@ func toremoteS3(localarch string) {
 	bucket := brf.InfraService + "-backup-" + strings.TrimSuffix(f, filepath.Ext(f))
 	object := REMOTE_ARCH_FILE
 
-	log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Trying to back up to %s/%s in S3 compatible remote storage", bucket, object))
+	log.WithFields(log.Fields{"func": "toremoteS3"}).Debug(fmt.Sprintf("Trying to back up to %s/%s in S3 compatible remote storage", bucket, object))
 	if mc, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL); err != nil {
 		log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s ", err))
 	} else {
@@ -83,7 +83,7 @@ func fromremoteS3() string {
 	bucket := brf.InfraService + "-backup-" + snapshotid
 	object := "latest.zip"
 
-	log.WithFields(log.Fields{"func": "fromremoteS3"}).Info(fmt.Sprintf("Trying to retrieve %s/%s from S3 compatible remote storage", bucket, object))
+	log.WithFields(log.Fields{"func": "fromremoteS3"}).Debug(fmt.Sprintf("Trying to retrieve %s/%s from S3 compatible remote storage", bucket, object))
 	if mc, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL); err != nil {
 		log.WithFields(log.Fields{"func": "fromremoteS3"}).Fatal(fmt.Sprintf("%s ", err))
 	} else {
