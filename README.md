@@ -239,6 +239,12 @@ $ curl 10.0.1.139:1026/v2/keys/foo
 {"action":"get","node":{"key":"/foo","value":"bar","modifiedIndex":17,"createdIndex":17}}
 ```
 
+## Release history
+
+-[ ] v0.3.0: WIP, adding support for backing up and restoring [Consul K/V store](issues/1)
+-[x] [v0.2.0](releases/tag/v0.2.0): support for restoring ZK and etcd from local storage and S3/Minio
+-[x] [v0.1.0](releases/tag/v0.1.0): support for backing up ZK and etcd to screen, local storage and S3/Minio
+
 ## Architecture
 
 `burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s backup algorithm is:

@@ -127,7 +127,7 @@ func processop() bool {
 		case INFRA_SERVICE_ETCD:
 			success = backupETCD()
 		default:
-			log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
 	case BURRY_OPERATION_RESTORE:
 		switch brf.InfraService {
@@ -136,10 +136,10 @@ func processop() bool {
 		case INFRA_SERVICE_ETCD:
 			success = restoreETCD()
 		default:
-			log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
+			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
 	default:
-		log.WithFields(log.Fields{"func": "process"}).Error(fmt.Sprintf("%s is not a valid operation", bop))
+		log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("%s is not a valid operation", bop))
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -151,8 +151,8 @@ func main() {
 		about()
 		os.Exit(0)
 	}
-	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Selected operation: %s", strings.ToUpper(bop)))
-	log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("My config: %+v", brf))
+	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Selected operation: %s", strings.ToUpper(bop)))
+	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("My config: %+v", brf))
 
 	if ok := processop(); ok {
 		if err := writebf(); err != nil {
