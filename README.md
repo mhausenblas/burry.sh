@@ -1,5 +1,7 @@
 # burry
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/mhausenblas/burry.sh)](https://goreportcard.com/report/github.com/mhausenblas/burry.sh)
+
 This is `burry`, the BackUp & RecoveRY tool for cloud native infrastructure services. Use `burry` to back up and restore
 critical infrastructure base services such as ZooKeeper and etcd. [More…](https://hackernoon.com/backup-recovery-of-infrastructure-services-200b2116930f)
 
