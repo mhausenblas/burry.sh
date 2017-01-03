@@ -22,6 +22,17 @@ Once you have either a local environment or a remote etcd cluster up and running
 $ curl localhost:2379/v2/keys/foo -XPUT -d value="bar"
 $ curl localhost:2379/v2/keys/baz -XPUT -d value="some"
 $ curl localhost:2379/v2/keys/meh/hu -XPUT -d value="moar"
+# get value at key:
+$ curl localhost:2379/v2/keys/foo
+{
+  "action": "get",
+  "node": {
+    "key": "/foo",
+    "value": "bar",
+    "modifiedIndex": 8,
+    "createdIndex": 8
+  }
+}
 # list all top-level keys:
 $ curl localhost:2379/v2/keys/
 {
@@ -52,21 +63,6 @@ $ curl localhost:2379/v2/keys/
 }
 # remove key:
 $ curl localhost:2379/v2/keys/meh/hu -XDELETE
-```
-
-Checking if values arrived:
-
-```bash
-$ curl etcd.mesos:1026/v2/keys/foo
-{
-  "action": "get",
-  "node": {
-    "key": "/foo",
-    "value": "bar",
-    "modifiedIndex": 8,
-    "createdIndex": 8
-  }
-}
 ```
 
 ## ZooKeeper
