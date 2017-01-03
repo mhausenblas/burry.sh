@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	VERSION                 string = "0.3.0"
+	VERSION                 string = "0.4.0"
 	BURRYFEST_FILE          string = ".burryfest"
 	BURRYMETA_FILE          string = ".burrymeta"
 	CONTENT_FILE            string = "content"
