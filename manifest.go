@@ -65,10 +65,10 @@ func parsecred() Credentials {
 // from an already parsed cred string
 func extractS3cred() (accessKeyID string, secretAccessKey string) {
 	for _, p := range brf.Creds.Params {
-		if p.Key == "AWS_ACCESS_KEY_ID" {
+		if p.Key == "ACCESS_KEY_ID" {
 			accessKeyID = p.Value
 		}
-		if p.Key == "AWS_SECRET_ACCESS_KEY" {
+		if p.Key == "SECRET_ACCESS_KEY" {
 			secretAccessKey = p.Value
 		}
 	}

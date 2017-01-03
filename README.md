@@ -11,7 +11,7 @@ critical infrastructure base services such as ZooKeeper and etcd. [More…](http
 | --------------:| ---------- | ------ | -------- |
 | Amazon S3      | B/R        | B/R    | B/R      |
 | Azure Storage  | []/[]      | []/[]  | []/[]    |
-| Google Storage | []/[]      | []/[]  | []/[]    |
+| Google Storage | B/R        | B/R    | B/R      |
 | Local          | B/R        | B/R    | B/R      |
 | Minio*         | B/R        | B/R    | B/R      |
 | TTY**          | B/-        | B/-    | B/-      |
@@ -73,7 +73,7 @@ Arguments:
         The manifest file captures the current command line parameters for re-use in subsequent operations.
   -c, --credentials string
         The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
-        Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
+        Example: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...
   -e, --endpoint string
         The infra service HTTP API endpoint to use.
         Example: localhost:8181 for Exhibitor
@@ -189,20 +189,20 @@ INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:
 INFO[0006] Operation successfully completed.             func=main
 
 # back up into Amazon S3:
-$ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
-INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
+$ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,ACCESS_KEY_ID=***,SECRET_ACCESS_KEY=***
+INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:ACCESS_KEY_ID Value:***} {Key:SECRET_ACCESS_KEY Value:***}]}}}  func=init
 INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
 INFO[0008] Operation successfully completed. The snapshot ID is: 1483166506  func=main
 ```
 
-See the [development and testing](dev.md#zookeeper) notes for the test setup.
+See the [development and testing](dev.md#zookeeper) notes for the test setup. Note: in order to back up to Google Storage rather than to Amazon S3, use `--credentials storage.googleapis.com,ACCESS_KEY_ID=***,SECRET_ACCESS_KEY=***` in above command. Make sure that you have Google Storage as your default project and Interoperability enabled; see also settings in [console.cloud.google.com/storage/settings](https://console.cloud.google.com/storage/settings).
 
 #### Back up etcd to Minio 
 
 To back up the content of an etcd running in a (DC/OS) cluster to Minio, do:
 
 ```bash
-$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
+$ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
 INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in S3 compatible remote storage play.minio.io:9000  func=remoteS3
 INFO[0001] Operation successfully completed. The snapshot ID is: 1483173687  func=main
@@ -255,18 +255,18 @@ In the following, we first create a backup of an Consul K/V store in Minio, then
 
 ```bash
 # let's first back up the Consul K/V store to Minio:
-$ ./burry -e jump:8500 -i consul -t s3 -c play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+$ ./burry -e jump:8500 -i consul -t s3 -c play.minio.io:9000,ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
 INFO[0000] Selected operation: BACKUP                    func=main
-INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:AWS_ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:AWS_SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483448835  func=main
 
 # now, let's destroy a key
 $ curl jump:8500/v1/kv/foo -XDELETE
 
 # restore it from the local backup:
-$ ./burry-o restore -e jump:8500 -i consul -t s3 -s 1483448835 -c play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+$ ./burry-o restore -e jump:8500 -i consul -t s3 -s 1483448835 -c play.minio.io:9000,ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
 INFO[0000] Selected operation: RESTORE                   func=main
-INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:AWS_ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:AWS_SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
 INFO[0000] Restored foo                                  func=visitCONSULReverse
 INFO[0000] Restored hi                                   func=visitCONSULReverse
 INFO[0000] Operation successfully completed. Restored 2 items from snapshot 1483448835  func=main

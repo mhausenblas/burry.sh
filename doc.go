@@ -15,7 +15,7 @@ Use:
         The manifest file captures the current command line parameters for re-use in subsequent operations.
   -c, --credentials string
         The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
-        Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
+        Example: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...
   -e, --endpoint string
         The infra service HTTP API endpoint to use.
         Example: localhost:8181 for Exhibitor
@@ -44,7 +44,7 @@ Examples:
  $ burry --endpoint leader.mesos:2181
 
  # back up a DC/OS etcd service to Minio playground:
- $ burry --endpoint etcd.mesos:1026 --isvc etcd --target s3 --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+ $ burry --endpoint etcd.mesos:1026 --isvc etcd --target s3 --credentials play.minio.io:9000,ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
 
  # restore etcd from snapshot ID 1483383204
  $ burry -o restore -e etcd.mesos:1026 -i etcd -t local -s 1483383204
