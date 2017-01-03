@@ -10,6 +10,9 @@ Use:
 
  With [args]:
 
+  -b, --burryfest
+        Create a burry manifest file .burryfest in the current directory.
+        The manifest file captures the current command line parameters for re-use in subsequent operations.
   -c, --credentials string
         The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
         Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
@@ -22,8 +25,6 @@ Use:
   -o, --operation string
         The operation to carry out.
         Supported values are [backup restore] (default "backup")
-  -w, --overwrite
-        Make command line values overwrite manifest values.
   -s, --snapshot string
         The ID of the snapshot.
         Example: 1483193387
@@ -33,8 +34,9 @@ Use:
   -v, --version
         Display version information and exit.
 
-Note that for a backup operation (-o backup) the endpoint (-e XXX) is mandatory and
-for a restore operation (-o restore) in addition the storage target (-t YYY) is mandatory.
+Note that for a backup operation (-o backup) the endpoint (-e EEE) is mandatory and
+for a restore operation (-o restore) in addition the storage target (-t TTT) and the
+snapshot ID (-s SSS) are mandatory.
 
 Examples:
 
@@ -43,6 +45,9 @@ Examples:
 
  # back up a DC/OS etcd service to Minio playground:
  $ burry --endpoint etcd.mesos:1026 --isvc etcd --target s3 --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
+
+ # restore etcd from snapshot ID 1483383204
+ $ burry -o restore -e etcd.mesos:1026 -i etcd -t local -s 1483383204
 
 To enable debug info, set an environment variable DEBUG, for example DEBUG=true burry ...
 

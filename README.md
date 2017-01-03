@@ -40,7 +40,10 @@ Note:
     - Example: [Back up etcd to Minio](#back-up-etcd-to-minio)
   - [Restores](#restores)
     - Example: [Restore etcd from local storage](#restore-etcd-from-local-storage)
-- [Architecture](#architecture)
+    - Example: [Restore Consul from local storage](#restore-consul-from-local-storage)
+- [Release history](#release-history)
+- [Background](background.md)
+- [Development and testing](dev.md)
 
 ## Install
 
@@ -131,10 +134,12 @@ Some concrete examples follow now.
 To dump the content of a locally running ZK onto the screen, do the following:
 
 ```bash
+# launching ZK:
 $ docker ps
 CONTAINER ID        IMAGE                                  COMMAND                  CREATED             STATUS              PORTS                                                                                            NAMES
 9ae41a9a02f8        mbabineau/zookeeper-exhibitor:latest   "bash -ex /opt/exhibi"   2 days ago          Up 2 days           0.0.0.0:2181->2181/tcp, 0.0.0.0:2888->2888/tcp, 0.0.0.0:3888->3888/tcp, 0.0.0.0:8181->8181/tcp   amazing_kilby
 
+# dump to screen:
 $ DEBUG=true ./burry --endpoint localhost:2181
 INFO[0000] Using burryfest /home/core/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
@@ -153,9 +158,11 @@ To back up the content of an etcd running in a (DC/OS) cluster to local storage,
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target local
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483194168  func=main
+
 # check for the archive:
 $ ls -al 1483194168.zip
 -rw-r--r--@ 1 mhausenblas  staff  750 31 Dec 14:22 1483194168.zip
+
 # explore the archive:
 $ unzip 1483194168.zip && cat 1483194168/.burrymeta | jq .
 {
@@ -220,16 +227,19 @@ $ ./burry -e etcd.mesos:1026 -i etcd -t local -b
 INFO[0000] Selected operation: BACKUP                    func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483383204  func=main
+
 # now, let's destroy a key:
 $ curl etcd.mesos:1026/v2/keys/foo -XDELETE
 {"action":"delete","node":{"key":"/foo","modifiedIndex":16,"createdIndex":15},"prevNode":{"key":"/foo","value":"bar","modifiedIndex":15,"createdIndex":15}}
-# ... and restore it from the backup:
-$ ./burry -o restore -s 1483383204
+
+# restore it from the local backup:
+$ ./burry -o restore -e etcd.mesos:1026 -i etcd -t local -s 1483383204
 INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] Selected operation: RESTORE                   func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Restored /foo                                 func=visitETCDReverse
 INFO[0000] Operation successfully completed. Restored 1 items from snapshot 1483383204  func=main
+
 # ... and we're back to normal:
 $ curl 10.0.1.139:1026/v2/keys/foo
 {"action":"get","node":{"key":"/foo","value":"bar","modifiedIndex":17,"createdIndex":17}}
@@ -237,8 +247,37 @@ $ curl 10.0.1.139:1026/v2/keys/foo
 
 See the [development and testing](dev.md#etcd) notes for the test setup.
 
+#### Restore Consul from local storage 
+
+In the following, we first create a local backup of an etcd cluster, then simulate failure by deleting a key and then restore it:
+
+```bash
+# let's first back up the Consul K/V store:
+$ ./burry -e jump:8500 -i consul -t local
+INFO[0000] Selected operation: BACKUP                    func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=main
+INFO[0000] Operation successfully completed. The snapshot ID is: 1483447056  func=main
+
+# now, let's destroy a key
+$ curl jump:8500/v1/kv/foo -XDELETE
+
+# restore it from the local backup:
+$ ./burry-o restore -e jump:8500 -i consul -t local -s 1483447056
+INFO[0000] Selected operation: RESTORE                   func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=main
+INFO[0000] Restored foo                                  func=visitCONSULReverse
+INFO[0000] Restored hi                                   func=visitCONSULReverse
+INFO[0000] Operation successfully completed. Restored 2 items from snapshot 1483447056  func=main
+
+# ... and we're back to normal:
+$ curl jump:8500/v1/kv/foo?raw
+bar
+```
+
+See the [development and testing](dev.md#consul) notes for the test setup.
+
 ## Release history
 
-- [ ] v0.3.0: WIP, adding support for backing up and restoring [Consul K/V store](../../issues/1)
+- [x] [v0.3.0](../../releases/tag/v0.3.0): support for backing up and restoring Consul from local storage and S3/Minio
 - [x] [v0.2.0](../../releases/tag/v0.2.0): support for restoring ZK and etcd from local storage and S3/Minio
 - [x] [v0.1.0](../../releases/tag/v0.1.0): support for backing up ZK and etcd to screen, local storage and S3/Minio
