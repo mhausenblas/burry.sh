@@ -181,7 +181,6 @@ INFO[0006] Operation successfully completed.             func=main
 
 # back up into Amazon S3:
 $ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
-INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
 INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
 INFO[0008] Operation successfully completed. The snapshot ID is: 1483166506  func=main
@@ -195,7 +194,6 @@ To back up the content of an etcd running in a (DC/OS) cluster to Minio, do:
 
 ```bash
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
-INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
 INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in S3 compatible remote storage play.minio.io:9000  func=remoteS3
 INFO[0001] Operation successfully completed. The snapshot ID is: 1483173687  func=main
@@ -218,7 +216,7 @@ In the following, we first create a local backup of an etcd cluster, then simula
 
 ```bash
 # let's first back up etcd:
-$ ./burry -e etcd.mesos:1026 -i etcd -t local
+$ ./burry -e etcd.mesos:1026 -i etcd -t local -b
 INFO[0000] Selected operation: BACKUP                    func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483383204  func=main
@@ -227,7 +225,7 @@ $ curl etcd.mesos:1026/v2/keys/foo -XDELETE
 {"action":"delete","node":{"key":"/foo","modifiedIndex":16,"createdIndex":15},"prevNode":{"key":"/foo","value":"bar","modifiedIndex":15,"createdIndex":15}}
 # ... and restore it from the backup:
 $ ./burry -o restore -s 1483383204
-INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] Selected operation: RESTORE                   func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:10.0.1.139:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Restored /foo                                 func=visitETCDReverse

@@ -109,6 +109,11 @@ func init() {
 
 func processop() bool {
 	success := false
+	// validate available operations parameter:
+	if brf.Endpoint == "" {
+		log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("You MUST supply an infra service endpoint with -e/--endpoint"))
+		return false
+	}
 	switch bop {
 	case BURRY_OPERATION_BACKUP:
 		switch brf.InfraService {
@@ -120,6 +125,10 @@ func processop() bool {
 			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("Infra service %s unknown or not yet supported", brf.InfraService))
 		}
 	case BURRY_OPERATION_RESTORE:
+		if snapshotid == based {
+			log.WithFields(log.Fields{"func": "processop"}).Error(fmt.Sprintf("You MUST supply a snapshot ID with -s/--snapshot"))
+			return false
+		}
 		switch brf.InfraService {
 		case INFRA_SERVICE_ZK:
 			success = restoreZK()
@@ -145,8 +154,10 @@ func main() {
 	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("My config: %+v", brf))
 
 	if ok := processop(); ok {
-		if err := writebf(); createburryfest && err != nil {
-			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burryfest: %s ", err))
+		if createburryfest {
+			if err := writebf(); err != nil {
+				log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burryfest: %s ", err))
+			}
 		}
 		switch bop {
 		case BURRY_OPERATION_BACKUP:

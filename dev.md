@@ -6,15 +6,52 @@ Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-
 
 ## etcd
 
-As per the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html) we can update etcd as follows:
+Using CoreOS' [etcd client](https://github.com/coreos/etcd/tree/master/client). Testing with following local environment:
+
+
+```bash
+$ docker run -d -p 2379:2379 -p 2380:2380 -p 4001:4001 -p 7001:7001 -v /data/backup/dir:/data --name test-etcd elcolio/etcd:2.0.10 -name test-etcd
+```
+
+Note: the IANA assigned ports for etcd are 2379 for client communication and 2380 for server-to-server communication.
+
+Once you have either a local environment or a remote etcd cluster up and running you can interact with it as follows (see also the [etcd v2 API](https://coreos.com/etcd/docs/latest/v2/api.html)):
 
 ```bash
 # add keys:
-$ curl etcd.mesos:1026/v2/keys/foo -XPUT -d value="bar"
-$ curl etcd.mesos:1026/v2/keys/meh -XPUT -d value="some"
-$ curl etcd.mesos:1026/v2/keys/buz/meh -XPUT -d value="moar"
+$ curl localhost:2379/v2/keys/foo -XPUT -d value="bar"
+$ curl localhost:2379/v2/keys/baz -XPUT -d value="some"
+$ curl localhost:2379/v2/keys/meh/hu -XPUT -d value="moar"
+# list all top-level keys:
+$ curl localhost:2379/v2/keys/
+{
+  "action": "get",
+  "node": {
+    "dir": true,
+    "nodes": [
+      {
+        "key": "/foo",
+        "value": "bar",
+        "modifiedIndex": 3,
+        "createdIndex": 3
+      },
+      {
+        "key": "/baz",
+        "value": "some",
+        "modifiedIndex": 4,
+        "createdIndex": 4
+      },
+      {
+        "key": "/meh",
+        "dir": true,
+        "modifiedIndex": 5,
+        "createdIndex": 5
+      }
+    ]
+  }
+}
 # remove key:
-$ curl etcd.mesos:1026/v2/keys/buz/meh -XDELETE
+$ curl localhost:2379/v2/keys/meh/hu -XDELETE
 ```
 
 Checking if values arrived:
@@ -31,9 +68,6 @@ $ curl etcd.mesos:1026/v2/keys/foo
   }
 }
 ```
-
-- TODO: add local test env via Docker (as with ZK)
-- Using https://github.com/coreos/etcd/tree/master/client
 
 ## ZooKeeper
 
