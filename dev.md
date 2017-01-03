@@ -4,10 +4,30 @@
 
 Using Minio [Go Client SDK](https://docs.minio.io/docs/golang-client-quickstart-guide) for maximum coverage. Testing against [play.minio.io](https://play.minio.io:9000/) as the default S3 backend.
 
+## Consul
+
+Using HashiCorp's [Consul API client](https://github.com/hashicorp/consul/tree/master/api). Testing with following local environment:
+
+```bash
+$ docker run -d --name=dev-consul -p 8500:8500 consul:v0.6.4 agent -server -client=0.0.0.0 -node=node0 -bootstrap-expect=1
+
+```
+
+Once you have either a local environment or a remote Consul cluster up and running you can interact with it as follows (see also the [Consul K/V store API](https://www.consul.io/docs/agent/http/kv.html)):
+
+```bash
+# add keys:
+$ curl -d @- localhost:8500/v1/kv/foo -XPUT <<< bar
+$ curl -d @- localhost:8500/v1/kv/hi/ho -XPUT <<< test
+# get value at key:
+$ curl 127.0.0.1:8500/v1/kv/hi/ho?raw
+# remove key:
+$ curl localhost:8500/v1/kv/foo -XDELETE
+```
+
 ## etcd
 
 Using CoreOS' [etcd client](https://github.com/coreos/etcd/tree/master/client). Testing with following local environment:
-
 
 ```bash
 $ docker run -d -p 2379:2379 -p 2380:2380 -p 4001:4001 -p 7001:7001 -v /data/backup/dir:/data --name test-etcd elcolio/etcd:2.0.10 -name test-etcd
