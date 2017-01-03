@@ -42,7 +42,7 @@ Note:
     - Example: [Back up etcd to Minio](#back-up-etcd-to-minio)
   - [Restores](#restores)
     - Example: [Restore etcd from local storage](#restore-etcd-from-local-storage)
-    - Example: [Restore Consul from local storage](#restore-consul-from-local-storage)
+    - Example: [Restore Consul from Minio](#restore-consul-from-minio)
 - [Release history](#release-history)
 - [Background](background.md)
 - [Development and testing](dev.md)
@@ -249,34 +249,34 @@ $ curl 10.0.1.139:1026/v2/keys/foo
 
 See the [development and testing](dev.md#etcd) notes for the test setup.
 
-#### Restore Consul from local storage 
+#### Restore Consul from Minio 
 
-In the following, we first create a local backup of an etcd cluster, then simulate failure by deleting a key and then restore it:
+In the following, we first create a backup of an Consul K/V store in Minio, then simulate failure by deleting a key and then restore it:
 
 ```bash
-# let's first back up the Consul K/V store:
-$ ./burry -e jump:8500 -i consul -t local
+# let's first back up the Consul K/V store to Minio:
+$ ./burry -e jump:8500 -i consul -t s3 -c play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
 INFO[0000] Selected operation: BACKUP                    func=main
-INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=main
-INFO[0000] Operation successfully completed. The snapshot ID is: 1483447056  func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:AWS_ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:AWS_SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
+INFO[0000] Operation successfully completed. The snapshot ID is: 1483448835  func=main
 
 # now, let's destroy a key
 $ curl jump:8500/v1/kv/foo -XDELETE
 
 # restore it from the local backup:
-$ ./burry-o restore -e jump:8500 -i consul -t local -s 1483447056
+$ ./burry-o restore -e jump:8500 -i consul -t s3 -s 1483448835 -c play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG
 INFO[0000] Selected operation: RESTORE                   func=main
-INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=main
+INFO[0000] My config: {InfraService:consul Endpoint:jump:8500 StorageTarget:s3 Creds:{StorageTargetEndpoint:play.minio.io:9000 Params:[{Key:AWS_ACCESS_KEY_ID Value:Q3AM3UQ867SPQQA43P2F} {Key:AWS_SECRET_ACCESS_KEY Value:zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG}]}}  func=main
 INFO[0000] Restored foo                                  func=visitCONSULReverse
 INFO[0000] Restored hi                                   func=visitCONSULReverse
-INFO[0000] Operation successfully completed. Restored 2 items from snapshot 1483447056  func=main
+INFO[0000] Operation successfully completed. Restored 2 items from snapshot 1483448835  func=main
 
 # ... and we're back to normal:
 $ curl jump:8500/v1/kv/foo?raw
 bar
 ```
 
-See the [development and testing](dev.md#consul) notes for the test setup.
+See the [development and testing](dev.md#consul) notes for the test setup. Note: the credentials used above are from the public [Minio playground](https://play.minio.io:9000/).
 
 ## Release history
 
