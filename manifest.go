@@ -77,22 +77,22 @@ func extractS3cred() (accessKeyID string, secretAccessKey string) {
 
 // loadbf tries to load a JSON representation of the burry manifest
 // file from the current working dir.
-func loadbf() (error, string, Burryfest) {
+func loadbf() (string, Burryfest, error) {
 	brf = Burryfest{}
 	cwd, _ := os.Getwd()
 	bfpath, _ := filepath.Abs(filepath.Join(cwd, BURRYFEST_FILE))
-	if _, err := os.Stat(bfpath); err == nil { // a burryfest exists
-		if raw, ferr := ioutil.ReadFile(bfpath); ferr != nil {
-			return ferr, bfpath, brf
+	if _, err := os.Stat(bfpath); err != nil { // burryfest does not exist
+		return bfpath, brf, err
+	} else {
+		if raw, ferr := ioutil.ReadFile(bfpath); ferr != nil { // can't read from burryfest
+			return bfpath, brf, ferr
 		} else {
-			if merr := json.Unmarshal(raw, &brf); merr != nil {
-				return merr, bfpath, brf
+			if derr := json.Unmarshal(raw, &brf); derr != nil { // can't de-serialize burryfest
+				return bfpath, brf, derr
 			}
 		}
-	} else {
-		return ErrNoBFF, bfpath, brf
 	}
-	return nil, bfpath, brf
+	return bfpath, brf, nil
 }
 
 // writebf creates a JSON representation of the burry manifest

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	etcd "github.com/coreos/etcd/client"
@@ -32,8 +31,8 @@ const (
 )
 
 var (
-	version   bool
-	overwrite bool
+	version         bool
+	createburryfest bool
 	// the operation burry should to carry out:
 	bop  string
 	BOPS = [...]string{BURRY_OPERATION_BACKUP, BURRY_OPERATION_RESTORE}
@@ -53,9 +52,8 @@ var (
 		STORAGE_TARGET_MINIO,
 	}
 	// the backup and restore manifest to use:
-	brf      Burryfest
-	ErrNoBFF = errors.New("no manifest found")
-	cred     string
+	brf  Burryfest
+	cred string
 	// local scratch base directory:
 	based string
 	// the snapshot ID:
@@ -74,7 +72,7 @@ func init() {
 	sst := STORAGE_TARGETS[:]
 	sort.Strings(sst)
 	flag.BoolVarP(&version, "version", "v", false, "Display version information and exit.")
-	flag.BoolVarP(&overwrite, "overwrite", "w", false, "Make command line values overwrite manifest values.")
+	flag.BoolVarP(&createburryfest, "burryfest", "b", false, fmt.Sprintf("Create a burry manifest file %s in the current directory.\n\tThe manifest file captures the current command line parameters for re-use in subsequent operations.", BURRYFEST_FILE))
 	flag.StringVarP(&bop, "operation", "o", BURRY_OPERATION_BACKUP, fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", BOPS))
 	flag.StringVarP(&isvc, "isvc", "i", INFRA_SERVICE_ZK, fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", INFRA_SERVICES))
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
@@ -92,22 +90,14 @@ func init() {
 	if envd := os.Getenv("DEBUG"); envd != "" {
 		log.SetLevel(log.DebugLevel)
 	}
-	c := parsecred()
-	if overwrite {
-		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: c}
+
+	if bfpath, mbrf, err := loadbf(); err != nil {
+		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: parsecred()}
 	} else {
-		err := errors.New("")
-		bfpath := ""
-		if err, bfpath, brf = loadbf(); err != nil {
-			if err == ErrNoBFF {
-				brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: c}
-			} else {
-				log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
-			}
-		} else {
-			log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using existing burry manifest file %s", bfpath))
-		}
+		brf = mbrf
+		log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using burryfest %s", bfpath))
 	}
+
 	based = strconv.FormatInt(time.Now().Unix(), 10)
 	if snapshotid == "" { // for backup ops
 		snapshotid = based
@@ -155,8 +145,8 @@ func main() {
 	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("My config: %+v", brf))
 
 	if ok := processop(); ok {
-		if err := writebf(); err != nil {
-			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burry manifest file: %s ", err))
+		if err := writebf(); createburryfest && err != nil {
+			log.WithFields(log.Fields{"func": "main"}).Fatal(fmt.Sprintf("Something went wrong when I tried to create the burryfest: %s ", err))
 		}
 		switch bop {
 		case BURRY_OPERATION_BACKUP:

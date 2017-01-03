@@ -23,7 +23,11 @@ critical infrastructure base services such as ZooKeeper and etcd. [More…](http
 **) TTY effectively means it's not stored at all but rather dumped on the screen; useful for debugging, though.
 ```
 
-Note: **this is WIP, please use with care. Only non-existing nodes or keys will be restored, that is, no existing data in ZK or etcd will be overwritten when attempting to restore data**.
+Note:
+
+- `burry` is WIP, please use with care
+- if you want to learn more about the design (goals/assumptions), check out the [background](background.md) notes
+- if you want to hack (rather than simply use) `burry`, check out the [development and testing](dev.md) notes
 
 **Contents:**
 
@@ -59,6 +63,9 @@ $ burry --help
 Usage: burry [args]
 
 Arguments:
+  -b, --burryfest
+        Create a burry manifest file .burryfest in the current directory.
+        The manifest file captures the current command line parameters for re-use in subsequent operations.
   -c, --credentials string
         The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
         Example: s3.amazonaws.com,AWS_ACCESS_KEY_ID=...,AWS_SECRET_ACCESS_KEY=...
@@ -71,8 +78,6 @@ Arguments:
   -o, --operation string
         The operation to carry out.
         Supported values are [backup restore] (default "backup")
-  -w, --overwrite
-        Make command line values overwrite manifest values.
   -s, --snapshot string
         The ID of the snapshot.
         Example: 1483193387
@@ -83,7 +88,7 @@ Arguments:
         Display version information and exit.
 ```
 
-When run the first time, `burry` creates a manifest file in the current directory called `.burryfest`, capturing all your settings. If a manifest `.burryfest` exists in the current directory subsequent invocations use this and hence you can simply execute `burry`, without any parameters. Use  `--overwrite` to temporarily overwrite command line parameters or remove the `.burryfest` file for permanent changes.
+Note: If you want to re-use your command line parameters, use the `--burryfest` or `-b` argument: this creates a manifest file `.burryfest` in the current directory, capturing all your settings. If a manifest `.burryfest` exists in the current directory subsequent invocations use this and hence you can simply execute `burry`, without any parameters. Remove the `.burryfest` file in the current directory to reset stored command line parameters.
 
 An example of a burry manifest file looks like:
 
@@ -113,15 +118,17 @@ Note that for every storage target other than `tty` a metadata file `.burrymeta`
 
 ### Backups
 
-In general, since `--operation backup` is the default, the only required parameter for a backup operation is the `--endpoint`, that is, the HTTP API of the ZooKeeper or etcd you want to back up.
+In general, since `--operation backup` is the default, the only required parameter for a backup operation is the `--endpoint`. That is, you'll have to provide the HTTP API of the ZooKeeper or etcd you want to back up:
 
 ```bash
-$ burry --endpoint IP:PORT (--operation backup) (--isvc etcd|zk) (--target tty|local|s3) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
+$ burry --endpoint IP:PORT (--isvc etcd|zk) (--target tty|local|s3) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...,KEYn=VALn)
 ```
+
+Some concrete examples follow now.
 
 #### Screen dump of local ZooKeeper content
 
-See the [development and testing](dev.md#zookeeper) notes for the test setup.
+To dump the content of a locally running ZK onto the screen, do the following:
 
 ```bash
 $ docker ps
@@ -129,27 +136,28 @@ CONTAINER ID        IMAGE                                  COMMAND              
 9ae41a9a02f8        mbabineau/zookeeper-exhibitor:latest   "bash -ex /opt/exhibi"   2 days ago          Up 2 days           0.0.0.0:2181->2181/tcp, 0.0.0.0:2888->2888/tcp, 0.0.0.0:3888->3888/tcp, 0.0.0.0:8181->8181/tcp   amazing_kilby
 
 $ DEBUG=true ./burry --endpoint localhost:2181
-INFO[0000] Using existing burry manifest file /home/core/.burryfest  func=init
+INFO[0000] Using burryfest /home/core/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:localhost:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] /zookeeper/quota:                             func=reapsimple
 INFO[0000] Operation successfully completed.             func=main
 ```
 
+See the [development and testing](dev.md#zookeeper) notes for the test setup.
+
 #### Back up etcd to local storage 
 
-See the [development and testing](dev.md#etcd) notes for the test setup.
+To back up the content of an etcd running in a (DC/OS) cluster to local storage, do:
 
 ```bash
+# create the backup:
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --target local
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:local Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0000] Operation successfully completed. The snapshot ID is: 1483194168  func=main
-
+# check for the archive:
 $ ls -al 1483194168.zip
 -rw-r--r--@ 1 mhausenblas  staff  750 31 Dec 14:22 1483194168.zip
-
-$ unzip 1483194168.zip
-
-$ cat 1483194168/.burrymeta | jq .
+# explore the archive:
+$ unzip 1483194168.zip && cat 1483194168/.burrymeta | jq .
 {
   "snapshot-date": "2016-12-31T14:22:48Z",
   "svc": "etcd",
@@ -159,50 +167,54 @@ $ cat 1483194168/.burrymeta | jq .
 }
 ```
 
+See the [development and testing](dev.md#etcd) notes for the test setup.
+
 #### Back up DC/OS system ZooKeeper to Amazon S3
 
-See the [development and testing](dev.md#zookeeper) notes for the test setup.
+To back up the content of the DC/OS system ZooKeeper (supervised by Exhibitor), do the following:
 
 ```bash
-# let's first do a dry run, that is, only dump to screen.
-# this works because the default value of --target is 'tty'
+# let's first do a dry run:
 $ ./burry --endpoint leader.mesos:2181
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:tty Creds:{StorageTargetEndpoint: Params:[]}}  func=init
 INFO[0006] Operation successfully completed.             func=main
 
-# now we know we can read stuff from ZK, let's get it
-# backed up into Amazon S3; you can either remove
-# .burryfest or use --overwrite to specify the new storage target
+# back up into Amazon S3:
 $ ./burry --endpoint leader.mesos:2181 --target s3 --credentials s3.amazonaws.com,AWS_ACCESS_KEY_ID=***,AWS_SECRET_ACCESS_KEY=***
-INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:zk Endpoint:leader.mesos:2181 StorageTarget:s3 Creds:{InfraServiceEndpoint:s3.amazonaws.com Params:[{Key:AWS_ACCESS_KEY_ID Value:***} {Key:AWS_SECRET_ACCESS_KEY Value:***}]}}}  func=init
 INFO[0008] Successfully stored zk-backup-1483166506/latest.zip (45464 Bytes) in S3 compatible remote storage s3.amazonaws.com  func=remoteS3
-INFO[0008] Operation successfully completed.             func=main
+INFO[0008] Operation successfully completed. The snapshot ID is: 1483166506  func=main
 ```
+
+See the [development and testing](dev.md#zookeeper) notes for the test setup.
 
 #### Back up etcd to Minio 
 
-See the [development and testing](dev.md#etcd) notes for the test setup. Note: the credentials used below are from the public [Minio playground](https://play.minio.io:9000/).
+To back up the content of an etcd running in a (DC/OS) cluster to Minio, do:
 
 ```bash
 $ ./burry --endpoint etcd.mesos:1026 --isvc etcd --credentials play.minio.io:9000,AWS_ACCESS_KEY_ID=Q3AM3UQ867SPQQA43P2F,AWS_SECRET_ACCESS_KEY=zuf+tfteSlswRu7BJ86wekitnifILbZam1KYY3TG --target s3
-INFO[0000] Using existing burry manifest file /tmp/.burryfest  func=init
+INFO[0000] Using burryfest /tmp/.burryfest  func=init
 INFO[0000] My config: {InfraService:etcd Endpoint:etcd.mesos:1026 StorageTarget:s3 Credentials:}  func=init
 INFO[0001] Successfully stored etcd-backup-1483173687/latest.zip (674 Bytes) in S3 compatible remote storage play.minio.io:9000  func=remoteS3
-INFO[0001] Operation successfully completed.             func=main
+INFO[0001] Operation successfully completed. The snapshot ID is: 1483173687  func=main
 ```
+
+See the [development and testing](dev.md#etcd) notes for the test setup. Note: the credentials used above are from the public [Minio playground](https://play.minio.io:9000/).
+
 
 ### Restores
 
-For restores you MUST set `--operation restore` as well as provide a `--snapshot` ID and note that you CAN NOT restore from screen, that is, `--target tty` is an invalid choice:
+For restores you MUST set `--operation restore` as well as provide a `--snapshot` ID. Note also that you CAN NOT restore from screen, that is, `--target tty` is an invalid choice:
 
 ```bash
-$ burry --operation restore --snapshot ID --target local|s3 (--isvc etcd|zk) (--overwrite) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn)
+$ burry --operation restore --snapshot ID --target local|s3 (--isvc etcd|zk) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...,KEYn=VALn)
 ```
 
 #### Restore etcd from local storage 
 
-See the [development and testing](dev.md#etcd) notes for the test setup.
+In the following, we first create a local backup of an etcd cluster, then simulate failure by deleting a key and then restore it:
 
 ```bash
 # let's first back up etcd:
@@ -225,19 +237,10 @@ $ curl 10.0.1.139:1026/v2/keys/foo
 {"action":"get","node":{"key":"/foo","value":"bar","modifiedIndex":17,"createdIndex":17}}
 ```
 
+See the [development and testing](dev.md#etcd) notes for the test setup.
+
 ## Release history
 
 - [ ] v0.3.0: WIP, adding support for backing up and restoring [Consul K/V store](../../issues/1)
 - [x] [v0.2.0](../../releases/tag/v0.2.0): support for restoring ZK and etcd from local storage and S3/Minio
 - [x] [v0.1.0](../../releases/tag/v0.1.0): support for backing up ZK and etcd to screen, local storage and S3/Minio
-
-## Architecture
-
-`burry` assumes that the infra service it operates on is tree-like. The essence of `burry`'s backup algorithm is:
-
-- Walk the tree from the root
-- For every non-leaf node: process its children
-- For every leaf node, store the content (that is, the node value) 
-- Depending on the storage target selected, create archive incl. metadata
-
-The restore algorithm: TBD.
