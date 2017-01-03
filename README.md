@@ -213,10 +213,10 @@ See the [development and testing](dev.md#etcd) notes for the test setup. Note: t
 
 ### Restores
 
-For restores you MUST set `--operation restore` as well as provide a `--snapshot` ID. Note also that you CAN NOT restore from screen, that is, `--target tty` is an invalid choice:
+For restores you MUST set `--operation restore` (or: `-o restore`) as well as provide a snapshot ID with `--snapshot/-s`. Note also that you CAN NOT restore from screen, that is, `--target/-t tty` is an invalid choice:
 
 ```bash
-$ burry --operation restore --snapshot ID --target local|s3 (--isvc etcd|zk) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...,KEYn=VALn)
+$ burry --operation restore --target local|s3 --snapshot sID (--isvc etcd|zk) (--credentials STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...,KEYn=VALn)
 ```
 
 #### Restore etcd from local storage 
