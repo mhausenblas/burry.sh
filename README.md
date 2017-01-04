@@ -280,6 +280,7 @@ See the [development and testing](dev.md#consul) notes for the test setup. Note:
 
 ## Release history
 
+- [x] [v0.4.0](../../releases/tag/v0.4.0): support for backing up to and restoring from Google Storage
 - [x] [v0.3.0](../../releases/tag/v0.3.0): support for backing up and restoring Consul from local storage and S3/Minio
 - [x] [v0.2.0](../../releases/tag/v0.2.0): support for restoring ZK and etcd from local storage and S3/Minio
 - [x] [v0.1.0](../../releases/tag/v0.1.0): support for backing up ZK and etcd to screen, local storage and S3/Minio
