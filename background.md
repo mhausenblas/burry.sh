@@ -54,6 +54,8 @@ The essence of `burry`'s backup algorithm is:
 
 ### Restore algorithm
 
+The essence of `burry`'s restore algorithm is:
+
 - Depending on the storage target selected, download the archive (possibly from remote).
 - Unarchive and walk the directory tree.
 - For every directory create a non-leaf node in infra service and process its children.
