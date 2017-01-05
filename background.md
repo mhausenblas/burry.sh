@@ -1,5 +1,7 @@
 # Background
 
+Some notes on where and how you can use `burry` and what the design considerations were.
+
 ## Use cases
 
 ### UC1: Debugging
@@ -33,7 +35,9 @@ You can use `burry` to perform cross-cluster failover:
 
 ### Design goals
 
-Safe and usable. Only non-existing nodes or keys will be restored, that is, no existing data in ZK or etcd will be overwritten when attempting to restore data.
+- The tool must be **safe** to use: only non-existing nodes or keys will shall be restored, that is, no existing data in ZK or etcd will be overwritten when attempting to carry out a restore operation. This extends also to security consideration, such as leaking sensitive data or enabling protection of the data backed up.
+- The tool must be **usable**: simple things should be simple (sane defaults) and complex workflow must be possible to support.
+- The tool's operation must be **transparent**: at any point in time the actions must be deterministic and explained (logs, documentation, etc.).
 
 ### Assumptions
 
@@ -43,11 +47,14 @@ Safe and usable. Only non-existing nodes or keys will be restored, that is, no e
 
 The essence of `burry`'s backup algorithm is:
 
-- Walk the tree from the root
-- For every non-leaf node: process its children
-- For every leaf node, store the content (that is, the node value) 
-- Depending on the storage target selected, create archive incl. metadata
+- Walk the tree from the root of the infra service.
+- For every non-leaf node in infra service: create a sub-directory in the local filesystem and process its children.
+- For every leaf node in infra service, store the content (that is, the node value) in a corresponding file. 
+- Depending on the storage target selected, create archive incl. metadata (possibly to remote).
 
 ### Restore algorithm
 
-TBD.
+- Depending on the storage target selected, download the archive (possibly from remote).
+- Unarchive and walk the directory tree.
+- For every directory create a non-leaf node in infra service and process its children.
+- For every file create a leaf node in infra service.
