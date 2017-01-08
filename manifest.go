@@ -13,6 +13,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
+// Burryfest defines the top-level structure of the
+// burry manifest file (.burryfest)
 type Burryfest struct {
 	InfraService  string      `json:"svc"`
 	Endpoint      string      `json:"svc-endpoint"`
@@ -20,16 +22,22 @@ type Burryfest struct {
 	Creds         Credentials `json:"credentials"`
 }
 
+// Credentials defines the structure of the access
+// credentials for the storage target endpoint to be used.
 type Credentials struct {
 	StorageTargetEndpoint string       `json:"target-endpoint"`
 	Params                []CredParams `json:"params"`
 }
 
+// CredParams defines a generic key-value structure capturing
+// credentials for access the storage target endpoint.
 type CredParams struct {
 	Key   string `json:"key"`
 	Value string `json:"val"`
 }
 
+// ArchMeta defines the top-level structure for the
+// metadata file in the archive.
 type ArchMeta struct {
 	SnapshotDate          string `json:"snapshot-date"`
 	InfraService          string `json:"svc"`
