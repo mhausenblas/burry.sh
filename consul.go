@@ -3,11 +3,12 @@ package main
 import (
 	// "encoding/base64"
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	consul "github.com/hashicorp/consul/api"
 	"os"
 	"path/filepath"
 	"strings"
+
+	log "github.com/Sirupsen/logrus"
+	consul "github.com/hashicorp/consul/api"
 )
 
 // backupCONSUL walks an etcd tree, applying

@@ -2,15 +2,16 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	log "github.com/Sirupsen/logrus"
 	etcd "github.com/coreos/etcd/client"
 	consul "github.com/hashicorp/consul/api"
 	flag "github.com/ogier/pflag"
 	"github.com/samuel/go-zookeeper/zk"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (

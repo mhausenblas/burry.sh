@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	"github.com/minio/minio-go"
 	"os"
 	"path/filepath"
 	"strings"
+
+	log "github.com/Sirupsen/logrus"
+	"github.com/minio/minio-go"
 )
 
 // toremote uploads the local ZIP archive to a

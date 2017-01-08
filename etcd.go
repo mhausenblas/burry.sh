@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	log "github.com/Sirupsen/logrus"
-	etcd "github.com/coreos/etcd/client"
-	"golang.org/x/net/context"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
+	etcd "github.com/coreos/etcd/client"
+	"golang.org/x/net/context"
 )
 
 // backupETCD walks an etcd tree, applying
