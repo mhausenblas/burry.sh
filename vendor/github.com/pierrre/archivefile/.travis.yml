@@ -1,0 +1,11 @@
+language: go
+
+sudo: false
+
+go:
+  - 1.8
+  - tip
+
+install: go get -v -d -t ./...
+
+script: make
