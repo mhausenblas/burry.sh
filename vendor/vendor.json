@@ -1,0 +1,163 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"path": "etcd.go",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "rqmhhAKJMYGv8DGOcfOJ0obxBto=",
+			"path": "github.com/coreos/etcd/client",
+			"revision": "61fc123e7a8b14a0a258aa3f5c4159861b1ec2e7",
+			"revisionTime": "2017-06-22T16:47:21Z",
+			"version": "v3.2.1",
+			"versionExact": "v3.2.1"
+		},
+		{
+			"checksumSHA1": "mKIXx1kDwmVmdIpZ3pJtRBuUKso=",
+			"path": "github.com/coreos/etcd/pkg/pathutil",
+			"revision": "36c655f29b9fef15c4094093c7407967c5c5bb96",
+			"revisionTime": "2017-06-29T23:24:31Z"
+		},
+		{
+			"checksumSHA1": "in4X4M2FFl6+eAXgxdxxSOZi1Vw=",
+			"path": "github.com/coreos/etcd/pkg/srv",
+			"revision": "36c655f29b9fef15c4094093c7407967c5c5bb96",
+			"revisionTime": "2017-06-29T23:24:31Z"
+		},
+		{
+			"checksumSHA1": "gx1gJIMU6T0UNQ0bPZ/drQ8cpCI=",
+			"path": "github.com/coreos/etcd/pkg/types",
+			"revision": "36c655f29b9fef15c4094093c7407967c5c5bb96",
+			"revisionTime": "2017-06-29T23:24:31Z"
+		},
+		{
+			"checksumSHA1": "MgYezsE5iTHxzTT5dnacBeuJBHY=",
+			"path": "github.com/coreos/etcd/version",
+			"revision": "36c655f29b9fef15c4094093c7407967c5c5bb96",
+			"revisionTime": "2017-06-29T23:24:31Z"
+		},
+		{
+			"checksumSHA1": "97BsbXOiZ8+Kr+LIuZkQFtSj7H4=",
+			"path": "github.com/coreos/go-semver/semver",
+			"revision": "1817cd4bea52af76542157eeabd74b057d1a199e",
+			"revisionTime": "2017-06-13T09:22:38Z"
+		},
+		{
+			"checksumSHA1": "L4bajYItNZdsrcbvTza6vtLCDis=",
+			"path": "github.com/hashicorp/consul/api",
+			"revision": "2c7715154d8d4568524b76d2d4deb7ca6fd1b285",
+			"revisionTime": "2017-06-27T17:42:54Z",
+			"version": "v0.8.5",
+			"versionExact": "v0.8.5"
+		},
+		{
+			"checksumSHA1": "b8F628srIitj5p7Y130xc9k0QWs=",
+			"path": "github.com/hashicorp/go-cleanhttp",
+			"revision": "3573b8b52aa7b37b9358d966a898feb387f62437",
+			"revisionTime": "2017-02-11T01:34:15Z"
+		},
+		{
+			"checksumSHA1": "A1PcINvF3UiwHRKn8UcgARgvGRs=",
+			"path": "github.com/hashicorp/go-rootcerts",
+			"revision": "6bb64b370b90e7ef1fa532be9e591a81c3493e00",
+			"revisionTime": "2016-05-03T14:34:40Z"
+		},
+		{
+			"checksumSHA1": "/oss17GO4hXGM7QnUdI3VzcAHzA=",
+			"path": "github.com/hashicorp/serf/coordinate",
+			"revision": "91fd53b1d3e624389ed9a295a3fa380e5c7b9dfc",
+			"revisionTime": "2017-06-14T22:59:51Z"
+		},
+		{
+			"checksumSHA1": "lg1qZw5Jtg7SiRD55KmeJ2BufKg=",
+			"path": "github.com/minio/minio-go",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "lsxCcRcNUDxhQyO999SOdvKzzfM=",
+			"path": "github.com/minio/minio-go/pkg/encrypt",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "3tl2ehmod/EzXE9o9WJ5HM2AQPE=",
+			"path": "github.com/minio/minio-go/pkg/policy",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "/5IXp1nGKqOfHn8Piiod3OCkG2U=",
+			"path": "github.com/minio/minio-go/pkg/s3signer",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "gRnCFKb4x83GBLVUZXoOjujd+U0=",
+			"path": "github.com/minio/minio-go/pkg/s3utils",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "maUy+dbN6VfTTnfErrAW2lLit1w=",
+			"path": "github.com/minio/minio-go/pkg/set",
+			"revision": "2f03abaa07d8bc57faef16cda7655ea62a7e0bed",
+			"revisionTime": "2017-05-07T07:20:50Z",
+			"version": "v2.1.0",
+			"versionExact": "v2.1.0"
+		},
+		{
+			"checksumSHA1": "V/quM7+em2ByJbWBLOsEwnY3j/Q=",
+			"path": "github.com/mitchellh/go-homedir",
+			"revision": "b8bc1bf767474819792c23f32d8286a45736f1c6",
+			"revisionTime": "2016-12-03T19:45:07Z"
+		},
+		{
+			"checksumSHA1": "jxORqtJ6VSFi4F45Wg1wxc2aUsc=",
+			"path": "github.com/ogier/pflag",
+			"revision": "45c278ab3607870051a2ea9040bb85fcb8557481",
+			"revisionTime": "2016-01-29T22:01:14Z"
+		},
+		{
+			"checksumSHA1": "C2Mx5UYupzzyOfii3uCZgL59RDY=",
+			"path": "github.com/pierrre/archivefile/zip",
+			"revision": "e2d100bc74f58ed7d2f41175cd2cf5fe29446399",
+			"revisionTime": "2017-02-18T18:40:37Z"
+		},
+		{
+			"checksumSHA1": "5SYLEhADhdBVZAGPVHWggQl7H8k=",
+			"path": "github.com/samuel/go-zookeeper/zk",
+			"revision": "1d7be4effb13d2d908342d349d71a284a7542693",
+			"revisionTime": "2016-10-28T23:23:40Z"
+		},
+		{
+			"checksumSHA1": "9Zw986fuQM/hCoVd8vmHoSM+8sU=",
+			"path": "github.com/ugorji/go/codec",
+			"revision": "5efa3251c7f7d05e5d9704a69a984ec9f1386a40",
+			"revisionTime": "2017-06-20T10:48:52Z"
+		},
+		{
+			"checksumSHA1": "Y+HGqEkYM15ir+J93MEaHdyFy0c=",
+			"path": "golang.org/x/net/context",
+			"revision": "1f9224279e98554b6a6432d4dd998a739f8b2b7c",
+			"revisionTime": "2017-06-29T16:46:45Z"
+		},
+		{
+			"path": "less",
+			"revision": ""
+		}
+	],
+	"rootPath": "github.com/mhausenblas/burry.sh"
+}
