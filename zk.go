@@ -40,6 +40,13 @@ func visitZK(path string, fn reap) {
 		return
 	} else {
 		log.WithFields(log.Fields{"func": "visitZK"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
+
+		if val, _, err := zkconn.Get(path); err != nil {
+			log.WithFields(log.Fields{"func": "visitZK"}).Error(fmt.Sprintf("%s", err))
+		} else {
+			fn(path, string(val))
+		}
+
 		if len(children) > 0 { // there are children
 			for _, c := range children {
 				newpath := ""
@@ -50,12 +57,6 @@ func visitZK(path string, fn reap) {
 				}
 				log.WithFields(log.Fields{"func": "visitZK"}).Debug(fmt.Sprintf("Next visiting child %s", newpath))
 				visitZK(newpath, fn)
-			}
-		} else { // we're on a leaf node
-			if val, _, err := zkconn.Get(path); err != nil {
-				log.WithFields(log.Fields{"func": "visitZK"}).Error(fmt.Sprintf("%s", err))
-			} else {
-				fn(path, string(val))
 			}
 		}
 	}
