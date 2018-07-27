@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/credentials"
 )
 
 // toremote uploads the local ZIP archive to a
@@ -30,29 +31,38 @@ func toremoteS3(localarch string) {
 		_ = os.Remove(localarch)
 	}()
 	endpoint := brf.Creds.StorageTargetEndpoint
-	accessKeyID, secretAccessKey := extractS3cred()
+	accessKeyID, secretAccessKey, bucket := extractS3cred()
 	useSSL := true
 	_, f := filepath.Split(localarch)
-	bucket := brf.InfraService + "-backup"
+	if bucket == "" {
+		bucket = brf.InfraService + "-backup"
+	}
 	object := strings.TrimSuffix(f, filepath.Ext(f))
 
 	log.WithFields(log.Fields{"func": "toremoteS3"}).Debug(fmt.Sprintf("Trying to back up to %s/%s in S3 compatible remote storage", bucket, object))
-	if mc, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL); err != nil {
+	mcOpts := minio.Options{}
+	mcOpts.Secure = useSSL
+	if accessKeyID == "" && secretAccessKey == ""{
+		iamCred := credentials.NewIAM("")
+		mcOpts.Creds = iamCred
+	} else {
+		keyCred := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+		mcOpts.Creds = keyCred
+	}
+	if mc, err := minio.NewWithOptions(endpoint, &mcOpts); err != nil {
 		log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s ", err))
 	} else {
-		location := "us-east-1"
-		if err = mc.MakeBucket(bucket, location); err != nil {
-			exists, err := mc.BucketExists(bucket)
-			if err == nil && exists {
-				log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Bucket %s already exists", bucket))
-			} else {
-				log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s", err))
-			}
-		}
-		if nbytes, err := mc.FPutObject(bucket, object, localarch, REMOTE_ARCH_TYPE); err != nil {
+		exists, err := mc.BucketExists(bucket)
+		if err != nil || !exists {
 			log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s", err))
 		} else {
-			log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Successfully stored %s/%s (%d Bytes) in S3 compatible remote storage %s", bucket, object, nbytes, endpoint))
+			if nbytes, err := mc.FPutObject(bucket, object, localarch, minio.PutObjectOptions{
+				ContentType: REMOTE_ARCH_TYPE,
+			}); err != nil {
+				log.WithFields(log.Fields{"func": "toremoteS3"}).Fatal(fmt.Sprintf("%s", err))
+			} else {
+				log.WithFields(log.Fields{"func": "toremoteS3"}).Info(fmt.Sprintf("Successfully stored %s/%s (%d Bytes) in S3 compatible remote storage %s", bucket, object, nbytes, endpoint))
+			}
 		}
 	}
 }
@@ -79,20 +89,31 @@ func fromremoteS3() string {
 	cwd, _ := os.Getwd()
 	localarch := filepath.Join(cwd, based+".zip")
 	endpoint := brf.Creds.StorageTargetEndpoint
-	accessKeyID, secretAccessKey := extractS3cred()
+	accessKeyID, secretAccessKey, bucket := extractS3cred()
 	useSSL := true
-	bucket := brf.InfraService + "-backup"
+	if bucket == "" {
+		bucket = brf.InfraService + "-backup"
+	}
 	object := snapshotid
 
 	log.WithFields(log.Fields{"func": "fromremoteS3"}).Debug(fmt.Sprintf("Trying to retrieve %s/%s from S3 compatible remote storage", bucket, object))
-	if mc, err := minio.New(endpoint, accessKeyID, secretAccessKey, useSSL); err != nil {
+	mcOpts := minio.Options{}
+	mcOpts.Secure = useSSL
+	if accessKeyID == "" && secretAccessKey == ""{
+		iamCred := credentials.NewIAM("")
+		mcOpts.Creds = iamCred
+	} else {
+		keyCred := credentials.NewStaticV4(accessKeyID, secretAccessKey, "")
+		mcOpts.Creds = keyCred
+	}
+	if mc, err := minio.NewWithOptions(endpoint, &mcOpts); err != nil {
 		log.WithFields(log.Fields{"func": "fromremoteS3"}).Fatal(fmt.Sprintf("%s ", err))
 	} else {
 		exists, err := mc.BucketExists(bucket)
 		if err != nil || !exists {
 			log.WithFields(log.Fields{"func": "fromremoteS3"}).Fatal(fmt.Sprintf("%s", err))
 		} else {
-			if err := mc.FGetObject(bucket, object, localarch); err != nil {
+			if err := mc.FGetObject(bucket, object, localarch, minio.GetObjectOptions{}); err != nil {
 				log.WithFields(log.Fields{"func": "fromremoteS3"}).Fatal(fmt.Sprintf("%s", err))
 			} else {
 				log.WithFields(log.Fields{"func": "fromremoteS3"}).Info(fmt.Sprintf("Successfully retrieved %s/%s from S3 compatible remote storage %s", bucket, object, endpoint))

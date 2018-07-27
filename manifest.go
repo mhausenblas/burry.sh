@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // Burryfest defines the top-level structure of the
@@ -72,7 +72,7 @@ func parsecred() Credentials {
 
 // extractS3cred tries to extract AWS access key and secret
 // from an already parsed cred string
-func extractS3cred() (accessKeyID string, secretAccessKey string) {
+func extractS3cred() (accessKeyID string, secretAccessKey string, bucket string) {
 	for _, p := range brf.Creds.Params {
 		if p.Key == "ACCESS_KEY_ID" {
 			accessKeyID = p.Value
@@ -80,8 +80,11 @@ func extractS3cred() (accessKeyID string, secretAccessKey string) {
 		if p.Key == "SECRET_ACCESS_KEY" {
 			secretAccessKey = p.Value
 		}
+		if p.Key == "BUCKET" {
+			bucket = p.Value
+		}
 	}
-	return accessKeyID, secretAccessKey
+	return accessKeyID, secretAccessKey, bucket
 }
 
 // loadbf tries to load a JSON representation of the burry manifest

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	etcd "github.com/coreos/etcd/client"
 	consul "github.com/hashicorp/consul/api"
 	flag "github.com/ogier/pflag"
