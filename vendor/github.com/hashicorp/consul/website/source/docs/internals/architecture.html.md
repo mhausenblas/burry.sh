@@ -107,12 +107,21 @@ The server nodes also operate as part of a WAN gossip pool. This pool is differe
 as it is optimized for the higher latency of the internet and is expected to contain only
 other Consul server nodes. The purpose of this pool is to allow datacenters to discover each
 other in a low-touch manner. Bringing a new datacenter online is as easy as joining the existing
-WAN gossip. Because the servers are all operating in this pool, it also enables cross-datacenter
+WAN gossip pool. Because the servers are all operating in this pool, it also enables cross-datacenter
 requests. When a server receives a request for a different datacenter, it forwards it to a random
 server in the correct datacenter. That server may then forward to the local leader.
 
 This results in a very low coupling between datacenters, but because of failure detection,
 connection caching and multiplexing, cross-datacenter requests are relatively fast and reliable.
+
+In general, data is not replicated between different Consul datacenters. When a
+request is made for a resource in another datacenter, the local Consul servers forward
+an RPC request to the remote Consul servers for that resource and return the results.
+If the remote datacenter is not available, then those resources will also not be
+available, but that won't otherwise affect the local datacenter. There are some special
+situations where a limited subset of data can be replicated, such as with Consul's built-in
+[ACL replication](/docs/guides/acl.html#outages-and-acl-replication) capability, or
+external tools like [consul-replicate](https://github.com/hashicorp/consul-replicate).
 
 ## Getting in depth
 

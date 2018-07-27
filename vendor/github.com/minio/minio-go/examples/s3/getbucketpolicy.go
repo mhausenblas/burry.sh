@@ -1,7 +1,8 @@
 // +build ignore
 
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015, 2016 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * Copyright 2015-2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +20,10 @@
 package main
 
 import (
+	"io"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/minio/minio-go"
 )
@@ -40,16 +44,21 @@ func main() {
 
 	// s3Client.TraceOn(os.Stderr)
 
-	// Fetch the policy at 'my-objectprefix'.
-	policy, err := s3Client.GetBucketPolicy("my-bucketname", "my-objectprefix")
+	policy, err := s3Client.GetBucketPolicy("my-bucketname")
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	// Description of policy output.
-	// "none" -  The specified bucket does not have a bucket policy.
-	// "readonly" - Read only operations are allowed.
-	// "writeonly" - Write only operations are allowed.
-	// "readwrite" - both read and write operations are allowed, the bucket is public.
-	log.Println("Success - ", policy)
+	// Create policy file
+	localFile, err := os.Create("policy.json")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer localFile.Close()
+
+	policyReader := strings.NewReader(policy)
+
+	if _, err := io.Copy(localFile, policyReader); err != nil {
+		log.Fatalln(err)
+	}
 }

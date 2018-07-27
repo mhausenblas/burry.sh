@@ -8,6 +8,7 @@ App.DcController = Ember.Controller.extend({
   needs: ["application"],
   // Whether or not the dropdown menu can be seen
   isDropdownVisible: false,
+  isNotificationVisible: true,
 
   datacenter: Ember.computed.alias('content'),
 
@@ -58,11 +59,20 @@ App.DcController = Ember.Controller.extend({
   // Boolean if the datacenter has any failing checks.
   //
   hasFailingChecks: Ember.computed.gt('totalChecksFailing', 0),
-
+  
+  init: function() {
+    if(App.get('settings.v1-notification-hidden', true)) {
+      this.set('isNotificationVisible', false);
+    }
+  },
   actions: {
     // Hide and show the dropdown menu
     toggle: function(item){
       this.toggleProperty('isDropdownVisible');
+    },
+    hideNotification: function(e) {
+      App.set('settings.v1-notification-hidden', true);
+      this.set('isNotificationVisible', false);
     },
     // Just hide the dropdown menu
     hideDrop: function(item){
@@ -314,7 +324,7 @@ App.AclsController = Ember.ArrayController.extend({
   filterText: "Filter by name or ID",
   searchBar: true,
   newAclButton: true,
-  types: ["management", "client"],
+  types: ["client", "management"],
 
   dc: Ember.computed.alias("controllers.dc"),
   items: Ember.computed.alias("acls"),
@@ -384,7 +394,7 @@ App.AclsShowController = Ember.ObjectController.extend({
   needs: ["dc", "acls"],
   dc: Ember.computed.alias("controllers.dc"),
   isLoading: false,
-  types: ["management", "client"],
+  types: ["client", "management"],
 
   actions: {
     set: function() {
@@ -501,6 +511,23 @@ App.SettingsController = Ember.ObjectController.extend({
         notify('Settings reset', 3000);
         this.set('isLoading', false);
       }
+    },
+
+    close: function() {
+      this.transitionToRoute('index');
+    }
+  }
+});
+
+App.ErrorController = Ember.ObjectController.extend({
+  actions: {
+    resetToken: function() {
+      App.set('settings.token', '');
+      this.transitionToRoute('settings');
+    },
+
+    backHome: function() {
+      this.transitionToRoute('index');
     }
   }
 });

@@ -16,6 +16,15 @@ failure of any datacenter does not impact the availability of Consul in other
 datacenters. This means each datacenter runs independently, each having a dedicated
 group of servers and a private LAN [gossip pool](/docs/internals/gossip.html).
 
+In general, data is not replicated between different Consul datacenters. When a
+request is made for a resource in another datacenter, the local Consul servers forward
+an RPC request to the remote Consul servers for that resource and return the results.
+If the remote datacenter is not available, then those resources will also not be
+available, but that won't otherwise affect the local datacenter. There are some special
+situations where a limited subset of data can be replicated, such as with Consul's built-in
+[ACL replication](/docs/guides/acl.html#outages-and-acl-replication) capability, or
+external tools like [consul-replicate](https://github.com/hashicorp/consul-replicate).
+
 This guide covers the basic form of federating Consul clusters using a single
 WAN gossip pool, interconnecting all Consul servers.
 [Consul Enterprise](https://www.hashicorp.com/products/consul/) version 0.8.0 added support
@@ -94,6 +103,20 @@ is to be used across datacenters, the network must be able to route traffic
 between IP addresses across regions as well. Usually, this means that all datacenters
 must be connected using a VPN or other tunneling mechanism. Consul does not handle
 VPN or NAT traversal for you.
+
+Note that for RPC forwarding to work the bind address must be accessible from remote nodes. 
+Configuring `serf_wan`, `advertise_wan_addr` and `translate_wan_addrs` can lead to a
+situation where `consul members -wan` lists remote nodes but RPC operations fail with one 
+of the following errors:
+
+- `No path to datacenter`
+- `rpc error getting client: failed to get conn: dial tcp <LOCAL_ADDR>:0-><REMOTE_ADDR>:<REMOTE_RPC_PORT>: i/o timeout`
+
+The most likely cause of these errors is that `bind_addr` is set to a private address preventing
+the RPC server from accepting connections across the WAN. Setting `bind_addr` to a public
+address (or one that can be routed across the WAN) will resolve this issue. Be aware that
+exposing the RPC server on a public port should only be done **after** firewall rules have
+been established.
 
 The [`translate_wan_addrs`](/docs/agent/options.html#translate_wan_addrs) configuration
 provides a basic address rewriting capability.

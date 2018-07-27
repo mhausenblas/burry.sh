@@ -48,13 +48,13 @@ The table below shows this endpoint's support for
 - `TaggedAddresses` `(map<string|string>: nil)` - Specifies the tagged
   addresses.
 
-- `Meta` `(map<string|string>: nil)` - Specifies arbitrary KV metadata
+- `NodeMeta` `(map<string|string>: nil)` - Specifies arbitrary KV metadata
   pairs for filtering purposes.
 
 - `Service` `(Service: nil)` - Specifies to register a service. If `ID` is not
   provided, it will be defaulted to the value of the `Service.Service` property.
   Only one service with a given `ID` may be present per node. The service
-  `Tags`, `Address`, and `Port` fields are all optional.
+  `Tags`, `Address`, `Meta`, and `Port` fields are all optional.
 
 - `Check` `(Check: nil)` - Specifies to register a check. The register API
   manipulates the health check entry in the Catalog, but it does not setup the
@@ -69,8 +69,15 @@ The table below shows this endpoint's support for
     treated as a service level health check, instead of a node level health
     check. The `Status` must be one of `passing`, `warning`, or `critical`.
 
+    The `Definition` field can be provided with details for a TCP or HTTP health
+    check. For more information, see the [Health Checks](/docs/agent/checks.html) page.
+
     Multiple checks can be provided by replacing `Check` with `Checks` and
     sending an array of `Check` objects.
+
+- `SkipNodeUpdate` `(bool: false)` - Specifies whether to skip updating the
+  node part of the registration. Useful in the case where only a health check
+  or service entry on a node needs to be updated.
 
 It is important to note that `Check` does not have to be provided with `Service`
 and vice versa. A catalog entry can have either, neither, or both.
@@ -98,6 +105,9 @@ and vice versa. A catalog entry can have either, neither, or both.
       "v1"
     ],
     "Address": "127.0.0.1",
+    "Meta": {
+        "redis_version": "4.0"
+    },
     "Port": 8000
   },
   "Check": {
@@ -106,8 +116,15 @@ and vice versa. A catalog entry can have either, neither, or both.
     "Name": "Redis health check",
     "Notes": "Script based health check",
     "Status": "passing",
-    "ServiceID": "redis1"
-  }
+    "ServiceID": "redis1",
+    "Definition": {
+      "TCP": "localhost:8888",
+      "Interval": "5s",
+      "Timeout": "1s",
+      "DeregisterCriticalServiceAfter": "30s"
+    }
+  },
+  "SkipNodeUpdate": false
 }
 ```
 
@@ -314,7 +331,7 @@ The table below shows this endpoint's support for
 
 | Blocking Queries | Consistency Modes | ACL Required   |
 | ---------------- | ----------------- | -------------- |
-| `TEST`           | `all`             | `service:read` |
+| `YES`            | `all`             | `service:read` |
 
 ### Parameters
 
@@ -376,7 +393,7 @@ The table below shows this endpoint's support for
   the datacenter of the agent being queried. This is specified as part of the
   URL as a query parameter.
 
-- `tag` `(string: "")` - Specifies tags to filter on.
+- `tag` `(string: "")` - Specifies the tag to filter on.
 
 - `near` `(string: "")` - Specifies a node name to sort the node list in
   ascending order based on the estimated round trip time from that node. Passing
@@ -408,8 +425,8 @@ $ curl \
       "lan": "192.168.10.10",
       "wan": "10.0.10.10"
     },
-    "Meta": {
-      "instance_type": "t2.medium"
+    "NodeMeta": {
+      "somekey": "somevalue"
     },
     "CreateIndex": 51,
     "ModifyIndex": 51,
@@ -418,6 +435,9 @@ $ curl \
     "ServiceID": "32a2a47f7992:nodea:5000",
     "ServiceName": "foobar",
     "ServicePort": 5000,
+    "ServiceMeta": {
+        "foobar_meta_value": "baz"
+    },
     "ServiceTags": [
       "tacos"
     ]
@@ -434,7 +454,7 @@ $ curl \
 - `TaggedAddresses` is the list of explicit LAN and WAN IP addresses for the
   agent
 
-- `Meta` is a list of user-defined metadata key/value pairs for the node
+- `NodeMeta` is a list of user-defined metadata key/value pairs for the node
 
 - `CreateIndex` is an internal index value representing when the service was
   created
@@ -453,9 +473,94 @@ $ curl \
 
 - `ServiceName` is the name of the service
 
+- `ServiceMeta` is a list of user-defined metadata key/value pairs for the service
+
 - `ServicePort` is the port number of the service
 
 - `ServiceTags` is a list of tags for the service
+
+- `ServiceKind` is the kind of service, usually "". See the Agent
+  registration API for more information.
+
+- `ServiceProxyDestination` is the name of the service that is being proxied,
+  for "connect-proxy" type services.
+
+- `ServiceConnect` are the [Connect](/docs/connect/index.html) settings. The
+  value of this struct is equivalent to the `Connect` field for service registration.
+
+## List Nodes for Connect-capable Service
+
+This endpoint returns the nodes providing a
+[Connect-capable](/docs/connect/index.html) service in a given datacenter.
+This will include both proxies and native integrations. A service may
+register both Connect-capable and incapable services at the same time,
+so this endpoint may be used to filter only the Connect-capable endpoints.
+
+| Method | Path                         | Produces                   |
+| ------ | ---------------------------- | -------------------------- |
+| `GET`  | `/catalog/connect/:service`  | `application/json`         |
+
+The table below shows this endpoint's support for
+[blocking queries](/api/index.html#blocking-queries),
+[consistency modes](/api/index.html#consistency-modes), and
+[required ACLs](/api/index.html#acls).
+
+| Blocking Queries | Consistency Modes | ACL Required             |
+| ---------------- | ----------------- | ------------------------ |
+| `YES`            | `all`             | `node:read,service:read` |
+
+### Parameters
+
+- `service` `(string: <required>)` - Specifies the name of the service for which
+  to list nodes. This is specified as part of the URL.
+
+- `dc` `(string: "")` - Specifies the datacenter to query. This will default to
+  the datacenter of the agent being queried. This is specified as part of the
+  URL as a query parameter.
+
+### Sample Request
+
+```text
+$ curl \
+    https://consul.rocks/v1/catalog/connect/my-service
+```
+
+### Sample Response
+
+```json
+[
+  {
+    "ID": "40e4a748-2192-161a-0510-9bf59fe950b5",
+    "Node": "foobar",
+    "Address": "192.168.10.10",
+    "Datacenter": "dc1",
+    "TaggedAddresses": {
+      "lan": "192.168.10.10",
+      "wan": "10.0.10.10"
+    },
+    "NodeMeta": {
+      "somekey": "somevalue"
+    },
+    "CreateIndex": 51,
+    "ModifyIndex": 51,
+    "ServiceAddress": "172.17.0.3",
+    "ServiceEnableTagOverride": false,
+    "ServiceID": "32a2a47f7992:nodea:5000",
+    "ServiceName": "foobar",
+	"ServiceKind": "connect-proxy",
+	"ServiceProxyDestination": "my-service",
+    "ServicePort": 5000,
+    "ServiceMeta": {
+        "foobar_meta_value": "baz"
+    },
+    "ServiceTags": [
+      "tacos"
+    ]
+  }
+]
+```
+
+The fields are the same as listing nodes for a service.
 
 ## List Services for Node
 
@@ -515,6 +620,7 @@ $ curl \
       "ID": "consul",
       "Service": "consul",
       "Tags": null,
+      "Meta": {},
       "Port": 8300
     },
     "redis": {
@@ -523,6 +629,9 @@ $ curl \
       "Tags": [
         "v1"
       ],
+      "Meta": {
+        "redis_version": "4.0"
+      },
       "Port": 8000
     }
   }

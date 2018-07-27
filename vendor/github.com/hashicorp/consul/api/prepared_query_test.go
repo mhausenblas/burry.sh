@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/consul/testutil/retry"
 )
 
-func TestPreparedQuery(t *testing.T) {
+func TestAPI_PreparedQuery(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -114,6 +114,53 @@ func TestPreparedQuery(t *testing.T) {
 	}
 	if results.Nodes[0].Node.Datacenter != "dc1" {
 		t.Fatalf("bad datacenter: %v", results)
+	}
+
+	// Add new node with failing health check.
+	reg2 := reg
+	reg2.Node = "failingnode"
+	reg2.Check = &AgentCheck{
+		Node:        "failingnode",
+		ServiceID:   "redis1",
+		ServiceName: "redis",
+		Name:        "failingcheck",
+		Status:      "critical",
+	}
+	retry.Run(t, func(r *retry.R) {
+		if _, err := catalog.Register(reg2, nil); err != nil {
+			r.Fatal(err)
+		}
+		if _, _, err := catalog.Node("failingnode", nil); err != nil {
+			r.Fatal(err)
+		}
+	})
+
+	// Execute by ID. Should return only healthy node.
+	results, _, err = query.Execute(def.ID, nil)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if len(results.Nodes) != 1 || results.Nodes[0].Node.Node != "foobar" {
+		t.Fatalf("bad: %v", results)
+	}
+	if wan, ok := results.Nodes[0].Node.TaggedAddresses["wan"]; !ok || wan != "127.0.0.1" {
+		t.Fatalf("bad: %v", results)
+	}
+
+	// Update PQ with ignore rule for the failing check
+	def.Service.IgnoreCheckIDs = []string{"failingcheck"}
+	_, err = query.Update(def, nil)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Execute by ID. Should return BOTH nodes ignoring the failing check.
+	results, _, err = query.Execute(def.ID, nil)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if len(results.Nodes) != 2 {
+		t.Fatalf("got %d nodes, want 2", len(results.Nodes))
 	}
 
 	// Delete it.

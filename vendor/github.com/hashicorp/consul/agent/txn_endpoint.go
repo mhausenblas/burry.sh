@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
 )
 
@@ -172,11 +172,6 @@ func (s *HTTPServer) convertOps(resp http.ResponseWriter, req *http.Request) (st
 // pathed to an endpoint that supports consistency modes (but not blocking),
 // and everything else will be routed through Raft like a normal write.
 func (s *HTTPServer) Txn(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	if req.Method != "PUT" {
-		resp.WriteHeader(http.StatusMethodNotAllowed)
-		return nil, nil
-	}
-
 	// Convert the ops from the API format to the internal format.
 	ops, writes, ok := s.convertOps(resp, req)
 	if !ok {

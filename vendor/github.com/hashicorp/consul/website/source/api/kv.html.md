@@ -26,6 +26,8 @@ For multi-key updates, please consider using [transaction](/api/txn.html).
 This endpoint returns the specified key. If no key exists at the given path, a
 404 is returned instead of a 200 response.
 
+For multi-key reads, please consider using [transaction](/api/txn.html).
+
 | Method | Path                         | Produces                   |
 | ------ | ---------------------------- | -------------------------- |
 | `GET`  | `/kv/:key`                   | `application/json`         |
@@ -184,7 +186,12 @@ The table below shows this endpoint's support for
   A key does not need to exist to be acquired. If the lock is already held by
   the given session, then the `LockIndex` is not incremented but the key
   contents are updated. This lets the current lock holder update the key
-  contents without having to give up the lock and reacquire it.
+  contents without having to give up the lock and reacquire it. **Note that an update
+  that does not include the acquire parameter will proceed normally even if another
+  session has locked the key.**
+
+    For an example of how to use the lock feature, see the [Leader Election Guide]
+    (/docs/guides/leader-election.html).
 
 - `release` `(string: "")` - Specifies to use a lock release operation. This is
   useful when paired with `?acquire=` as it allows clients to yield a lock. This
@@ -195,12 +202,19 @@ The table below shows this endpoint's support for
 
 The payload is arbitrary, and is loaded directly into Consul as supplied.
 
-### Sample Request
+### Sample Requests
 
-```text
+```bash
 $ curl \
     --request PUT \
     --data @contents \
+    https://consul.rocks/v1/kv/my-key
+
+# or
+
+$ curl \
+    --request PUT \
+    --data-binary @contents \
     https://consul.rocks/v1/kv/my-key
 ```
 

@@ -7,12 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/agent/consul"
-	"github.com/hashicorp/consul/agent/consul/structs"
-)
-
-const (
-	preparedQueryExecuteSuffix = "/execute"
-	preparedQueryExplainSuffix = "/explain"
+	"github.com/hashicorp/consul/agent/structs"
 )
 
 // preparedQueryCreateResponse is used to wrap the query ID.
@@ -27,12 +22,10 @@ func (s *HTTPServer) preparedQueryCreate(resp http.ResponseWriter, req *http.Req
 	}
 	s.parseDC(req, &args.Datacenter)
 	s.parseToken(req, &args.Token)
-	if req.ContentLength > 0 {
-		if err := decodeBody(req, &args.Query, nil); err != nil {
-			resp.WriteHeader(400)
-			fmt.Fprintf(resp, "Request decode failed: %v", err)
-			return nil, nil
-		}
+	if err := decodeBody(req, &args.Query, nil); err != nil {
+		resp.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(resp, "Request decode failed: %v", err)
+		return nil, nil
 	}
 
 	var reply string
@@ -50,9 +43,17 @@ func (s *HTTPServer) preparedQueryList(resp http.ResponseWriter, req *http.Reque
 	}
 
 	var reply structs.IndexedPreparedQueries
+	defer setMeta(resp, &reply.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("PreparedQuery.List", &args, &reply); err != nil {
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < reply.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	reply.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Use empty list instead of nil.
 	if reply.Queries == nil {
@@ -71,8 +72,7 @@ func (s *HTTPServer) PreparedQueryGeneral(resp http.ResponseWriter, req *http.Re
 		return s.preparedQueryList(resp, req)
 
 	default:
-		resp.WriteHeader(405)
-		return nil, nil
+		return nil, MethodNotAllowedError{req.Method, []string{"GET", "POST"}}
 	}
 }
 
@@ -96,6 +96,7 @@ func (s *HTTPServer) preparedQueryExecute(id string, resp http.ResponseWriter, r
 		Agent: structs.QuerySource{
 			Node:       s.agent.config.NodeName,
 			Datacenter: s.agent.config.Datacenter,
+			Segment:    s.agent.config.SegmentName,
 		},
 	}
 	s.parseSource(req, &args.Source)
@@ -106,23 +107,41 @@ func (s *HTTPServer) preparedQueryExecute(id string, resp http.ResponseWriter, r
 		return nil, fmt.Errorf("Bad limit: %s", err)
 	}
 
+	params := req.URL.Query()
+	if raw := params.Get("connect"); raw != "" {
+		val, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("Error parsing 'connect' value: %s", err)
+		}
+
+		args.Connect = val
+	}
+
 	var reply structs.PreparedQueryExecuteResponse
+	defer setMeta(resp, &reply.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("PreparedQuery.Execute", &args, &reply); err != nil {
 		// We have to check the string since the RPC sheds
 		// the specific error type.
 		if err.Error() == consul.ErrQueryNotFound.Error() {
-			resp.WriteHeader(404)
+			resp.WriteHeader(http.StatusNotFound)
 			fmt.Fprint(resp, err.Error())
 			return nil, nil
 		}
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < reply.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	reply.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 
 	// Note that we translate using the DC that the results came from, since
 	// a query can fail over to a different DC than where the execute request
 	// was sent to. That's why we use the reply's DC and not the one from
 	// the args.
-	translateAddresses(s.agent.config, reply.Datacenter, reply.Nodes)
+	s.agent.TranslateAddresses(reply.Datacenter, reply.Nodes)
 
 	// Use empty list instead of nil.
 	if reply.Nodes == nil {
@@ -140,6 +159,7 @@ func (s *HTTPServer) preparedQueryExplain(id string, resp http.ResponseWriter, r
 		Agent: structs.QuerySource{
 			Node:       s.agent.config.NodeName,
 			Datacenter: s.agent.config.Datacenter,
+			Segment:    s.agent.config.SegmentName,
 		},
 	}
 	s.parseSource(req, &args.Source)
@@ -151,16 +171,24 @@ func (s *HTTPServer) preparedQueryExplain(id string, resp http.ResponseWriter, r
 	}
 
 	var reply structs.PreparedQueryExplainResponse
+	defer setMeta(resp, &reply.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("PreparedQuery.Explain", &args, &reply); err != nil {
 		// We have to check the string since the RPC sheds
 		// the specific error type.
 		if err.Error() == consul.ErrQueryNotFound.Error() {
-			resp.WriteHeader(404)
+			resp.WriteHeader(http.StatusNotFound)
 			fmt.Fprint(resp, err.Error())
 			return nil, nil
 		}
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < reply.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	reply.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 	return reply, nil
 }
 
@@ -174,16 +202,24 @@ func (s *HTTPServer) preparedQueryGet(id string, resp http.ResponseWriter, req *
 	}
 
 	var reply structs.IndexedPreparedQueries
+	defer setMeta(resp, &reply.QueryMeta)
+RETRY_ONCE:
 	if err := s.agent.RPC("PreparedQuery.Get", &args, &reply); err != nil {
 		// We have to check the string since the RPC sheds
 		// the specific error type.
 		if err.Error() == consul.ErrQueryNotFound.Error() {
-			resp.WriteHeader(404)
+			resp.WriteHeader(http.StatusNotFound)
 			fmt.Fprint(resp, err.Error())
 			return nil, nil
 		}
 		return nil, err
 	}
+	if args.QueryOptions.AllowStale && args.MaxStaleDuration > 0 && args.MaxStaleDuration < reply.LastContact {
+		args.AllowStale = false
+		args.MaxStaleDuration = 0
+		goto RETRY_ONCE
+	}
+	reply.ConsistencyLevel = args.QueryOptions.ConsistencyLevel()
 	return reply.Queries, nil
 }
 
@@ -196,10 +232,14 @@ func (s *HTTPServer) preparedQueryUpdate(id string, resp http.ResponseWriter, re
 	s.parseToken(req, &args.Token)
 	if req.ContentLength > 0 {
 		if err := decodeBody(req, &args.Query, nil); err != nil {
-			resp.WriteHeader(400)
+			resp.WriteHeader(http.StatusBadRequest)
 			fmt.Fprintf(resp, "Request decode failed: %v", err)
 			return nil, nil
 		}
+	}
+
+	if args.Query == nil {
+		args.Query = &structs.PreparedQuery{}
 	}
 
 	// Take the ID from the URL, not the embedded one.
@@ -230,38 +270,62 @@ func (s *HTTPServer) preparedQueryDelete(id string, resp http.ResponseWriter, re
 	return nil, nil
 }
 
+// PreparedQuerySpecificOptions handles OPTIONS requests to prepared query endpoints.
+func (s *HTTPServer) preparedQuerySpecificOptions(resp http.ResponseWriter, req *http.Request) interface{} {
+	path := req.URL.Path
+	switch {
+	case strings.HasSuffix(path, "/execute"):
+		resp.Header().Add("Allow", strings.Join([]string{"OPTIONS", "GET"}, ","))
+		return resp
+
+	case strings.HasSuffix(path, "/explain"):
+		resp.Header().Add("Allow", strings.Join([]string{"OPTIONS", "GET"}, ","))
+		return resp
+
+	default:
+		resp.Header().Add("Allow", strings.Join([]string{"OPTIONS", "GET", "PUT", "DELETE"}, ","))
+		return resp
+	}
+}
+
 // PreparedQuerySpecific handles all the prepared query requests specific to a
 // particular query.
 func (s *HTTPServer) PreparedQuerySpecific(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
-	id := strings.TrimPrefix(req.URL.Path, "/v1/query/")
-
-	execute, explain := false, false
-	if strings.HasSuffix(id, preparedQueryExecuteSuffix) {
-		execute = true
-		id = strings.TrimSuffix(id, preparedQueryExecuteSuffix)
-	} else if strings.HasSuffix(id, preparedQueryExplainSuffix) {
-		explain = true
-		id = strings.TrimSuffix(id, preparedQueryExplainSuffix)
+	if req.Method == "OPTIONS" {
+		return s.preparedQuerySpecificOptions(resp, req), nil
 	}
 
-	switch req.Method {
-	case "GET":
-		if execute {
-			return s.preparedQueryExecute(id, resp, req)
-		} else if explain {
-			return s.preparedQueryExplain(id, resp, req)
-		} else {
-			return s.preparedQueryGet(id, resp, req)
+	path := req.URL.Path
+	id := strings.TrimPrefix(path, "/v1/query/")
+
+	switch {
+	case strings.HasSuffix(path, "/execute"):
+		if req.Method != "GET" {
+			return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
 		}
+		id = strings.TrimSuffix(id, "/execute")
+		return s.preparedQueryExecute(id, resp, req)
 
-	case "PUT":
-		return s.preparedQueryUpdate(id, resp, req)
-
-	case "DELETE":
-		return s.preparedQueryDelete(id, resp, req)
+	case strings.HasSuffix(path, "/explain"):
+		if req.Method != "GET" {
+			return nil, MethodNotAllowedError{req.Method, []string{"GET"}}
+		}
+		id = strings.TrimSuffix(id, "/explain")
+		return s.preparedQueryExplain(id, resp, req)
 
 	default:
-		resp.WriteHeader(405)
-		return nil, nil
+		switch req.Method {
+		case "GET":
+			return s.preparedQueryGet(id, resp, req)
+
+		case "PUT":
+			return s.preparedQueryUpdate(id, resp, req)
+
+		case "DELETE":
+			return s.preparedQueryDelete(id, resp, req)
+
+		default:
+			return nil, MethodNotAllowedError{req.Method, []string{"GET", "PUT", "DELETE"}}
+		}
 	}
 }
