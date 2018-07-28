@@ -5,9 +5,54 @@ import (
 	"regexp"
 
 	"github.com/hashicorp/consul/agent/consul/prepared_query"
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/go-memdb"
 )
+
+// preparedQueriesTableSchema returns a new table schema used for storing
+// prepared queries.
+func preparedQueriesTableSchema() *memdb.TableSchema {
+	return &memdb.TableSchema{
+		Name: "prepared-queries",
+		Indexes: map[string]*memdb.IndexSchema{
+			"id": &memdb.IndexSchema{
+				Name:         "id",
+				AllowMissing: false,
+				Unique:       true,
+				Indexer: &memdb.UUIDFieldIndex{
+					Field: "ID",
+				},
+			},
+			"name": &memdb.IndexSchema{
+				Name:         "name",
+				AllowMissing: true,
+				Unique:       true,
+				Indexer: &memdb.StringFieldIndex{
+					Field:     "Name",
+					Lowercase: true,
+				},
+			},
+			"template": &memdb.IndexSchema{
+				Name:         "template",
+				AllowMissing: true,
+				Unique:       true,
+				Indexer:      &PreparedQueryIndex{},
+			},
+			"session": &memdb.IndexSchema{
+				Name:         "session",
+				AllowMissing: true,
+				Unique:       false,
+				Indexer: &memdb.UUIDFieldIndex{
+					Field: "Session",
+				},
+			},
+		},
+	}
+}
+
+func init() {
+	registerSchema(preparedQueriesTableSchema)
+}
 
 // validUUID is used to check if a given string looks like a UUID
 var validUUID = regexp.MustCompile(`(?i)^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$`)
@@ -256,7 +301,7 @@ func (s *Store) PreparedQueryGet(ws memdb.WatchSet, queryID string) (uint64, *st
 // PreparedQueryResolve returns the given prepared query by looking up an ID or
 // Name. If the query was looked up by name and it's a template, then the
 // template will be rendered before it is returned.
-func (s *Store) PreparedQueryResolve(queryIDOrName string) (uint64, *structs.PreparedQuery, error) {
+func (s *Store) PreparedQueryResolve(queryIDOrName string, source structs.QuerySource) (uint64, *structs.PreparedQuery, error) {
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 
@@ -293,7 +338,7 @@ func (s *Store) PreparedQueryResolve(queryIDOrName string) (uint64, *structs.Pre
 	prep := func(wrapped interface{}) (uint64, *structs.PreparedQuery, error) {
 		wrapper := wrapped.(*queryWrapper)
 		if prepared_query.IsTemplate(wrapper.PreparedQuery) {
-			render, err := wrapper.ct.Render(queryIDOrName)
+			render, err := wrapper.ct.Render(queryIDOrName, source)
 			if err != nil {
 				return idx, nil, err
 			}

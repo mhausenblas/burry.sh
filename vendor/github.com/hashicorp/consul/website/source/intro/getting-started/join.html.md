@@ -12,8 +12,7 @@ description: >
 # Consul Cluster
 
 We've started our first agent and registered and queried a service on that
-agent. This showed how easy it is to use Consul but didn't show how this could
-be extended to a scalable, production-grade service discovery infrastructure.
+agent. Additionally, we've configured Consul Connect to automatically authorize and encrypt connections between services. This showed how easy it is to use Consul but didn't show how this could be extended to a scalable, production-grade service mesh infrastructure.
 In this step, we'll create our first real cluster with multiple members.
 
 When a Consul agent is started, it begins without knowledge of any other node:
@@ -72,6 +71,12 @@ the replicated log until the expected number of servers has successfully joined.
 You can read more about this in the [bootstrapping
 guide](/docs/guides/bootstrapping.html).
 
+We've included the [`-enable-script-checks`](/docs/agent/options.html#_enable_script_checks)
+flag set to `true` in order to enable health checks that can execute external scripts.
+This will be used in examples later. For production use, you'd want to configure
+[ACLs](/docs/guides/acl.html) in conjunction with this to control the ability to
+register arbitrary scripts.
+
 Finally, we add the [`config-dir` flag](/docs/agent/options.html#_config_dir),
 marking where service and check definitions can be found.
 
@@ -81,7 +86,7 @@ All together, these settings yield a
 ```text
 vagrant@n1:~$ consul agent -server -bootstrap-expect=1 \
 	-data-dir=/tmp/consul -node=agent-one -bind=172.20.20.10 \
-	-config-dir=/etc/consul.d
+	-enable-script-checks=true -config-dir=/etc/consul.d
 ...
 ```
 
@@ -102,7 +107,7 @@ All together, these settings yield a
 
 ```text
 vagrant@n2:~$ consul agent -data-dir=/tmp/consul -node=agent-two \
-	-bind=172.20.20.11 -config-dir=/etc/consul.d
+	-bind=172.20.20.11 -enable-script-checks=true -config-dir=/etc/consul.d
 ...
 ```
 

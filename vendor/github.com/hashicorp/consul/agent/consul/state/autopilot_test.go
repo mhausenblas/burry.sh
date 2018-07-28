@@ -3,15 +3,23 @@ package state
 import (
 	"reflect"
 	"testing"
+	"time"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/consul/autopilot"
+	"github.com/pascaldekloe/goe/verify"
 )
 
 func TestStateStore_Autopilot(t *testing.T) {
 	s := testStateStore(t)
 
-	expected := &structs.AutopilotConfig{
-		CleanupDeadServers: true,
+	expected := &autopilot.Config{
+		CleanupDeadServers:      true,
+		LastContactThreshold:    5 * time.Second,
+		MaxTrailingLogs:         500,
+		ServerStabilizationTime: 100 * time.Second,
+		RedundancyZoneTag:       "az",
+		DisableUpgradeMigration: true,
+		UpgradeVersionTag:       "build",
 	}
 
 	if err := s.AutopilotSetConfig(0, expected); err != nil {
@@ -33,7 +41,7 @@ func TestStateStore_Autopilot(t *testing.T) {
 func TestStateStore_AutopilotCAS(t *testing.T) {
 	s := testStateStore(t)
 
-	expected := &structs.AutopilotConfig{
+	expected := &autopilot.Config{
 		CleanupDeadServers: true,
 	}
 
@@ -45,7 +53,7 @@ func TestStateStore_AutopilotCAS(t *testing.T) {
 	}
 
 	// Do a CAS with an index lower than the entry
-	ok, err := s.AutopilotCASConfig(2, 0, &structs.AutopilotConfig{
+	ok, err := s.AutopilotCASConfig(2, 0, &autopilot.Config{
 		CleanupDeadServers: false,
 	})
 	if ok || err != nil {
@@ -66,7 +74,7 @@ func TestStateStore_AutopilotCAS(t *testing.T) {
 	}
 
 	// Do another CAS, this time with the correct index
-	ok, err = s.AutopilotCASConfig(2, 1, &structs.AutopilotConfig{
+	ok, err = s.AutopilotCASConfig(2, 1, &autopilot.Config{
 		CleanupDeadServers: false,
 	})
 	if !ok || err != nil {
@@ -84,4 +92,46 @@ func TestStateStore_AutopilotCAS(t *testing.T) {
 	if config.CleanupDeadServers {
 		t.Fatalf("bad: %#v", config)
 	}
+}
+
+func TestStateStore_Autopilot_Snapshot_Restore(t *testing.T) {
+	s := testStateStore(t)
+	before := &autopilot.Config{
+		CleanupDeadServers: true,
+	}
+	if err := s.AutopilotSetConfig(99, before); err != nil {
+		t.Fatal(err)
+	}
+
+	snap := s.Snapshot()
+	defer snap.Close()
+
+	after := &autopilot.Config{
+		CleanupDeadServers: false,
+	}
+	if err := s.AutopilotSetConfig(100, after); err != nil {
+		t.Fatal(err)
+	}
+
+	snapped, err := snap.Autopilot()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	verify.Values(t, "", before, snapped)
+
+	s2 := testStateStore(t)
+	restore := s2.Restore()
+	if err := restore.Autopilot(snapped); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	restore.Commit()
+
+	idx, res, err := s2.AutopilotConfig()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	if idx != 99 {
+		t.Fatalf("bad index: %d", idx)
+	}
+	verify.Values(t, "", before, res)
 }

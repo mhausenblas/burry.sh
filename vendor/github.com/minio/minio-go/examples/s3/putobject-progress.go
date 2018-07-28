@@ -1,7 +1,8 @@
 // +build ignore
 
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * Copyright 2015-2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +40,7 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	reader, err := s3Client.GetObject("my-bucketname", "my-objectname")
+	reader, err := s3Client.GetObject("my-bucketname", "my-objectname", minio.GetObjectOptions{})
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -50,13 +51,12 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	// progress reader is notified as PutObject makes progress with
-	// the read. For partial resume put object, progress reader is
-	// appropriately advanced.
+	// Progress reader is notified as PutObject makes progress with
+	// the Reads inside.
 	progress := pb.New64(objectInfo.Size)
 	progress.Start()
+	n, err := s3Client.PutObject("my-bucketname", "my-objectname-progress", reader, objectInfo.Size, minio.PutObjectOptions{ContentType: "application/octet-stream", Progress: progress})
 
-	n, err := s3Client.PutObjectWithProgress("my-bucketname", "my-objectname-progress", reader, "application/octet-stream", progress)
 	if err != nil {
 		log.Fatalln(err)
 	}

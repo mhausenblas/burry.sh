@@ -3,10 +3,53 @@ package state
 import (
 	"fmt"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/lib"
 	"github.com/hashicorp/go-memdb"
-	"github.com/hashicorp/serf/coordinate"
 )
+
+// coordinatesTableSchema returns a new table schema used for storing
+// network coordinates.
+func coordinatesTableSchema() *memdb.TableSchema {
+	return &memdb.TableSchema{
+		Name: "coordinates",
+		Indexes: map[string]*memdb.IndexSchema{
+			"id": &memdb.IndexSchema{
+				Name:         "id",
+				AllowMissing: false,
+				Unique:       true,
+				Indexer: &memdb.CompoundIndex{
+					// AllowMissing is required since we allow
+					// Segment to be an empty string.
+					AllowMissing: true,
+					Indexes: []memdb.Indexer{
+						&memdb.StringFieldIndex{
+							Field:     "Node",
+							Lowercase: true,
+						},
+						&memdb.StringFieldIndex{
+							Field:     "Segment",
+							Lowercase: true,
+						},
+					},
+				},
+			},
+			"node": &memdb.IndexSchema{
+				Name:         "node",
+				AllowMissing: false,
+				Unique:       false,
+				Indexer: &memdb.StringFieldIndex{
+					Field:     "Node",
+					Lowercase: true,
+				},
+			},
+		},
+	}
+}
+
+func init() {
+	registerSchema(coordinatesTableSchema)
+}
 
 // Coordinates is used to pull all the coordinates from the snapshot.
 func (s *Snapshot) Coordinates() (memdb.ResultIterator, error) {
@@ -40,26 +83,26 @@ func (s *Restore) Coordinates(idx uint64, updates structs.Coordinates) error {
 	return nil
 }
 
-// CoordinateGetRaw queries for the coordinate of the given node. This is an
-// unusual state store method because it just returns the raw coordinate or
-// nil, none of the Raft or node information is returned. This hits the 90%
-// internal-to-Consul use case for this data, and this isn't exposed via an
-// endpoint, so it doesn't matter that the Raft info isn't available.
-func (s *Store) CoordinateGetRaw(node string) (*coordinate.Coordinate, error) {
+// Coordinate returns a map of coordinates for the given node, indexed by
+// network segment.
+func (s *Store) Coordinate(node string, ws memdb.WatchSet) (uint64, lib.CoordinateSet, error) {
 	tx := s.db.Txn(false)
 	defer tx.Abort()
 
-	// Pull the full coordinate entry.
-	coord, err := tx.First("coordinates", "id", node)
-	if err != nil {
-		return nil, fmt.Errorf("failed coordinate lookup: %s", err)
-	}
+	tableIdx := maxIndexTxn(tx, "coordinates")
 
-	// Pick out just the raw coordinate.
-	if coord != nil {
-		return coord.(*structs.Coordinate).Coord, nil
+	iter, err := tx.Get("coordinates", "node", node)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed coordinate lookup: %s", err)
 	}
-	return nil, nil
+	ws.Add(iter.WatchCh())
+
+	results := make(lib.CoordinateSet)
+	for raw := iter.Next(); raw != nil; raw = iter.Next() {
+		coord := raw.(*structs.Coordinate)
+		results[coord.Segment] = coord.Coord
+	}
+	return tableIdx, results, nil
 }
 
 // Coordinates queries for all nodes with coordinates.

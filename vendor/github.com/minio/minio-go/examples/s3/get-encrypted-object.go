@@ -1,7 +1,8 @@
 // +build ignore
 
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * Copyright 2015-2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +25,7 @@ import (
 	"os"
 
 	"github.com/minio/minio-go"
+	"github.com/minio/minio-go/pkg/encrypt"
 )
 
 func main() {
@@ -40,38 +42,19 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	//// Build an asymmetric key from private and public files
-	//
-	// privateKey, err := ioutil.ReadFile("private.key")
-	// if err != nil {
-	//	t.Fatal(err)
-	// }
-	//
-	// publicKey, err := ioutil.ReadFile("public.key")
-	// if err != nil {
-	//	t.Fatal(err)
-	// }
-	//
-	// asymmetricKey, err := NewAsymmetricKey(privateKey, publicKey)
-	// if err != nil {
-	//	t.Fatal(err)
-	// }
-	////
+	bucketname := "my-bucketname"              // Specify a bucket name - the bucket must already exist
+	objectName := "my-objectname"              // Specify a object name - the object must already exist
+	password := "correct horse battery staple" // Specify your password. DO NOT USE THIS ONE - USE YOUR OWN.
 
-	// Build a symmetric key
-	symmetricKey := minio.NewSymmetricKey([]byte("my-secret-key-00"))
+	// New SSE-C where the cryptographic key is derived from a password and the objectname + bucketname as salt
+	encryption := encrypt.DefaultPBKDF([]byte(password), []byte(bucketname+objectName))
 
-	// Build encryption materials which will encrypt uploaded data
-	cbcMaterials, err := minio.NewCBCSecureMaterials(symmetricKey)
+	// Get the encrypted object
+	reader, err := s3Client.GetObject(bucketname, objectName, minio.GetObjectOptions{ServerSideEncryption: encryption})
 	if err != nil {
 		log.Fatalln(err)
 	}
-
-	// Get a deciphered data from the server, deciphering is assured by cbcMaterials
-	reader, err := s3Client.GetEncryptedObject("my-bucketname", "my-objectname", cbcMaterials)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	defer reader.Close()
 
 	// Local file which holds plain data
 	localFile, err := os.Create("my-testfile")

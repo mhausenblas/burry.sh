@@ -13,7 +13,7 @@ Consul is only a single command-line application: `consul`. This application
 then takes a subcommand such as "agent" or "members". The complete list of
 subcommands is in the navigation to the left.
 
-The `Consul` CLI is a well-behaved command line application. In erroneous
+The `consul` CLI is a well-behaved command line application. In erroneous
 cases, a non-zero exit status will be returned. It also responds to `-h` and `--help`
 as you'd most likely expect. And some commands that expect input accept
 "-" as a parameter to tell Consul to read the input from stdin.
@@ -23,20 +23,21 @@ no arguments:
 
 ```text
 $ consul
-usage: consul [--version] [--help] <command> [<args>]
+Usage: consul [--version] [--help] <command> [<args>]
 
 Available commands are:
     agent          Runs a Consul agent
-    configtest     Validate config file
+    catalog        Interact with the catalog
     event          Fire a new event
     exec           Executes a command on Consul nodes
     force-leave    Forces a member of the cluster to enter the "left" state
-    info           Provides debugging information for operators
+    info           Provides debugging information for operators.
     join           Tell Consul agent to join cluster
     keygen         Generates a new encryption key
     keyring        Manages gossip layer encryption keys
-    kv             Interact with the KV store
+    kv             Interact with the key-value store
     leave          Gracefully leaves the Consul cluster and shuts down
+    license        Get/Put the Consul Enterprise license (Enterprise-only)
     lock           Execute a command holding a lock
     maint          Controls node or service maintenance mode
     members        Lists the members of a Consul cluster
@@ -44,6 +45,8 @@ Available commands are:
     operator       Provides cluster-level tools for Consul operators
     reload         Triggers the agent to reload configuration files
     rtt            Estimates network round trip time between nodes
+    snapshot       Saves, restores and inspects snapshots of Consul server state
+    validate       Validate config files/directories
     version        Prints the Consul version
     watch          Watch for changes in Consul
 ```
@@ -77,6 +80,25 @@ Command Options
 
   -wan
      Joins a server to another server in the WAN pool.
+```
+
+## Autocompletion
+
+The `consul` command features opt-in subcommand autocompletion that you can
+enable for your shell with `consul -autocomplete-install`. After doing so,
+you can invoke a new shell and use the feature.
+
+For example, assume a tab is typed at the end of each prompt line:
+
+```
+$ consul e
+event  exec
+
+$ consul r
+reload  rtt
+
+$ consul operator raft
+list-peers   remove-peer
 ```
 
 ## Environment Variables

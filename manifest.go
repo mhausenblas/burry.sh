@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // Burryfest defines the top-level structure of the
@@ -46,6 +46,15 @@ type ArchMeta struct {
 	StorageTargetEndpoint string `json:"target-endpoint"`
 }
 
+// S3Config defines the structure for the configuration
+// pertaining to the S3 endpoint
+type S3Config struct {
+	AccessKeyId     string
+	SecretAccessKey string
+	Bucket          string
+	Prefix          string
+}
+
 // parsecred parses the cred string in the form:
 // STORAGE_TARGET_ENDPOINT,KEY1=VAL1,KEY2=VAL2,...KEYn=VALn
 // into a Credentials variable
@@ -70,18 +79,24 @@ func parsecred() Credentials {
 	return c
 }
 
-// extractS3cred tries to extract AWS access key and secret
+// extractS3config tries to extract AWS access key and secret
 // from an already parsed cred string
-func extractS3cred() (accessKeyID string, secretAccessKey string) {
+func extractS3config() (s3Config S3Config) {
 	for _, p := range brf.Creds.Params {
 		if p.Key == "ACCESS_KEY_ID" {
-			accessKeyID = p.Value
+			s3Config.AccessKeyId = p.Value
 		}
 		if p.Key == "SECRET_ACCESS_KEY" {
-			secretAccessKey = p.Value
+			s3Config.SecretAccessKey = p.Value
+		}
+		if p.Key == "BUCKET" {
+			s3Config.Bucket = p.Value
+		}
+		if p.Key == "PREFIX" {
+			s3Config.Prefix = p.Value
 		}
 	}
-	return accessKeyID, secretAccessKey
+	return s3Config
 }
 
 // loadbf tries to load a JSON representation of the burry manifest

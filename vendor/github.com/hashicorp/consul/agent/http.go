@@ -3,29 +3,106 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"net/url"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/NYTimes/gziphandler"
 	"github.com/armon/go-metrics"
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/acl"
+	"github.com/hashicorp/consul/agent/cache"
+	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/go-cleanhttp"
 	"github.com/mitchellh/mapstructure"
 )
+
+// MethodNotAllowedError should be returned by a handler when the HTTP method is not allowed.
+type MethodNotAllowedError struct {
+	Method string
+	Allow  []string
+}
+
+func (e MethodNotAllowedError) Error() string {
+	return fmt.Sprintf("method %s not allowed", e.Method)
+}
+
+// BadRequestError should be returned by a handler when parameters or the payload are not valid
+type BadRequestError struct {
+	Reason string
+}
+
+func (e BadRequestError) Error() string {
+	return fmt.Sprintf("Bad request: %s", e.Reason)
+}
 
 // HTTPServer provides an HTTP api for an agent.
 type HTTPServer struct {
 	*http.Server
-	agent *Agent
+	ln        net.Listener
+	agent     *Agent
+	blacklist *Blacklist
+
+	// proto is filled by the agent to "http" or "https".
 	proto string
 }
 
-func NewHTTPServer(addr string, a *Agent) *HTTPServer {
-	s := &HTTPServer{Server: &http.Server{Addr: addr}, agent: a}
-	s.Server.Handler = s.handler(s.agent.config.EnableDebug)
-	return s
+type redirectFS struct {
+	fs http.FileSystem
+}
+
+func (fs *redirectFS) Open(name string) (http.File, error) {
+	file, err := fs.fs.Open(name)
+	if err != nil {
+		file, err = fs.fs.Open("/index.html")
+	}
+	return file, err
+}
+
+// endpoint is a Consul-specific HTTP handler that takes the usual arguments in
+// but returns a response object and error, both of which are handled in a
+// common manner by Consul's HTTP server.
+type endpoint func(resp http.ResponseWriter, req *http.Request) (interface{}, error)
+
+// unboundEndpoint is an endpoint method on a server.
+type unboundEndpoint func(s *HTTPServer, resp http.ResponseWriter, req *http.Request) (interface{}, error)
+
+// endpoints is a map from URL pattern to unbound endpoint.
+var endpoints map[string]unboundEndpoint
+
+// allowedMethods is a map from endpoint prefix to supported HTTP methods.
+// An empty slice means an endpoint handles OPTIONS requests and MethodNotFound errors itself.
+var allowedMethods map[string][]string
+
+// registerEndpoint registers a new endpoint, which should be done at package
+// init() time.
+func registerEndpoint(pattern string, methods []string, fn unboundEndpoint) {
+	if endpoints == nil {
+		endpoints = make(map[string]unboundEndpoint)
+	}
+	if endpoints[pattern] != nil || allowedMethods[pattern] != nil {
+		panic(fmt.Errorf("Pattern %q is already registered", pattern))
+	}
+
+	endpoints[pattern] = fn
+	allowedMethods[pattern] = methods
+}
+
+// wrappedMux hangs on to the underlying mux for unit tests.
+type wrappedMux struct {
+	mux     *http.ServeMux
+	handler http.Handler
+}
+
+// ServeHTTP implements the http.Handler interface.
+func (w *wrappedMux) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
+	w.handler.ServeHTTP(resp, req)
 }
 
 // handler is used to attach our handlers to the mux
@@ -52,97 +129,28 @@ func (s *HTTPServer) handler(enableDebug bool) http.Handler {
 
 		// Register the wrapper, which will close over the expensive-to-compute
 		// parts from above.
+		// TODO (kyhavlov): Convert this to utilize metric labels in a major release
 		wrapper := func(resp http.ResponseWriter, req *http.Request) {
 			start := time.Now()
 			handler(resp, req)
-			key := append([]string{"consul", "http", req.Method}, parts...)
+			key := append([]string{"http", req.Method}, parts...)
 			metrics.MeasureSince(key, start)
 		}
-		mux.HandleFunc(pattern, wrapper)
+
+		gzipWrapper, _ := gziphandler.GzipHandlerWithOpts(gziphandler.MinSize(0))
+		gzipHandler := gzipWrapper(http.HandlerFunc(wrapper))
+		mux.Handle(pattern, gzipHandler)
 	}
 
 	mux.HandleFunc("/", s.Index)
-
-	// API V1.
-	if s.agent.config.ACLDatacenter != "" {
-		handleFuncMetrics("/v1/acl/create", s.wrap(s.ACLCreate))
-		handleFuncMetrics("/v1/acl/update", s.wrap(s.ACLUpdate))
-		handleFuncMetrics("/v1/acl/destroy/", s.wrap(s.ACLDestroy))
-		handleFuncMetrics("/v1/acl/info/", s.wrap(s.ACLGet))
-		handleFuncMetrics("/v1/acl/clone/", s.wrap(s.ACLClone))
-		handleFuncMetrics("/v1/acl/list", s.wrap(s.ACLList))
-		handleFuncMetrics("/v1/acl/replication", s.wrap(s.ACLReplicationStatus))
-	} else {
-		handleFuncMetrics("/v1/acl/create", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/update", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/destroy/", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/info/", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/clone/", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/list", s.wrap(ACLDisabled))
-		handleFuncMetrics("/v1/acl/replication", s.wrap(ACLDisabled))
+	for pattern, fn := range endpoints {
+		thisFn := fn
+		methods, _ := allowedMethods[pattern]
+		bound := func(resp http.ResponseWriter, req *http.Request) (interface{}, error) {
+			return thisFn(s, resp, req)
+		}
+		handleFuncMetrics(pattern, s.wrap(bound, methods))
 	}
-	handleFuncMetrics("/v1/agent/self", s.wrap(s.AgentSelf))
-	handleFuncMetrics("/v1/agent/maintenance", s.wrap(s.AgentNodeMaintenance))
-	handleFuncMetrics("/v1/agent/reload", s.wrap(s.AgentReload))
-	handleFuncMetrics("/v1/agent/monitor", s.wrap(s.AgentMonitor))
-	handleFuncMetrics("/v1/agent/services", s.wrap(s.AgentServices))
-	handleFuncMetrics("/v1/agent/checks", s.wrap(s.AgentChecks))
-	handleFuncMetrics("/v1/agent/members", s.wrap(s.AgentMembers))
-	handleFuncMetrics("/v1/agent/join/", s.wrap(s.AgentJoin))
-	handleFuncMetrics("/v1/agent/leave", s.wrap(s.AgentLeave))
-	handleFuncMetrics("/v1/agent/force-leave/", s.wrap(s.AgentForceLeave))
-	handleFuncMetrics("/v1/agent/check/register", s.wrap(s.AgentRegisterCheck))
-	handleFuncMetrics("/v1/agent/check/deregister/", s.wrap(s.AgentDeregisterCheck))
-	handleFuncMetrics("/v1/agent/check/pass/", s.wrap(s.AgentCheckPass))
-	handleFuncMetrics("/v1/agent/check/warn/", s.wrap(s.AgentCheckWarn))
-	handleFuncMetrics("/v1/agent/check/fail/", s.wrap(s.AgentCheckFail))
-	handleFuncMetrics("/v1/agent/check/update/", s.wrap(s.AgentCheckUpdate))
-	handleFuncMetrics("/v1/agent/service/register", s.wrap(s.AgentRegisterService))
-	handleFuncMetrics("/v1/agent/service/deregister/", s.wrap(s.AgentDeregisterService))
-	handleFuncMetrics("/v1/agent/service/maintenance/", s.wrap(s.AgentServiceMaintenance))
-	handleFuncMetrics("/v1/catalog/register", s.wrap(s.CatalogRegister))
-	handleFuncMetrics("/v1/catalog/deregister", s.wrap(s.CatalogDeregister))
-	handleFuncMetrics("/v1/catalog/datacenters", s.wrap(s.CatalogDatacenters))
-	handleFuncMetrics("/v1/catalog/nodes", s.wrap(s.CatalogNodes))
-	handleFuncMetrics("/v1/catalog/services", s.wrap(s.CatalogServices))
-	handleFuncMetrics("/v1/catalog/service/", s.wrap(s.CatalogServiceNodes))
-	handleFuncMetrics("/v1/catalog/node/", s.wrap(s.CatalogNodeServices))
-	if !s.agent.config.DisableCoordinates {
-		handleFuncMetrics("/v1/coordinate/datacenters", s.wrap(s.CoordinateDatacenters))
-		handleFuncMetrics("/v1/coordinate/nodes", s.wrap(s.CoordinateNodes))
-	} else {
-		handleFuncMetrics("/v1/coordinate/datacenters", s.wrap(coordinateDisabled))
-		handleFuncMetrics("/v1/coordinate/nodes", s.wrap(coordinateDisabled))
-	}
-	handleFuncMetrics("/v1/event/fire/", s.wrap(s.EventFire))
-	handleFuncMetrics("/v1/event/list", s.wrap(s.EventList))
-	handleFuncMetrics("/v1/health/node/", s.wrap(s.HealthNodeChecks))
-	handleFuncMetrics("/v1/health/checks/", s.wrap(s.HealthServiceChecks))
-	handleFuncMetrics("/v1/health/state/", s.wrap(s.HealthChecksInState))
-	handleFuncMetrics("/v1/health/service/", s.wrap(s.HealthServiceNodes))
-	handleFuncMetrics("/v1/internal/ui/nodes", s.wrap(s.UINodes))
-	handleFuncMetrics("/v1/internal/ui/node/", s.wrap(s.UINodeInfo))
-	handleFuncMetrics("/v1/internal/ui/services", s.wrap(s.UIServices))
-	handleFuncMetrics("/v1/kv/", s.wrap(s.KVSEndpoint))
-	handleFuncMetrics("/v1/operator/raft/configuration", s.wrap(s.OperatorRaftConfiguration))
-	handleFuncMetrics("/v1/operator/raft/peer", s.wrap(s.OperatorRaftPeer))
-	handleFuncMetrics("/v1/operator/keyring", s.wrap(s.OperatorKeyringEndpoint))
-	handleFuncMetrics("/v1/operator/autopilot/configuration", s.wrap(s.OperatorAutopilotConfiguration))
-	handleFuncMetrics("/v1/operator/autopilot/health", s.wrap(s.OperatorServerHealth))
-	handleFuncMetrics("/v1/query", s.wrap(s.PreparedQueryGeneral))
-	handleFuncMetrics("/v1/query/", s.wrap(s.PreparedQuerySpecific))
-	handleFuncMetrics("/v1/session/create", s.wrap(s.SessionCreate))
-	handleFuncMetrics("/v1/session/destroy/", s.wrap(s.SessionDestroy))
-	handleFuncMetrics("/v1/session/renew/", s.wrap(s.SessionRenew))
-	handleFuncMetrics("/v1/session/info/", s.wrap(s.SessionGet))
-	handleFuncMetrics("/v1/session/node/", s.wrap(s.SessionsForNode))
-	handleFuncMetrics("/v1/session/list", s.wrap(s.SessionList))
-	handleFuncMetrics("/v1/status/leader", s.wrap(s.StatusLeader))
-	handleFuncMetrics("/v1/status/peers", s.wrap(s.StatusPeers))
-	handleFuncMetrics("/v1/snapshot", s.wrap(s.Snapshot))
-	handleFuncMetrics("/v1/txn", s.wrap(s.Txn))
-
-	// Debug endpoints.
 	if enableDebug {
 		handleFuncMetrics("/debug/pprof/", pprof.Index)
 		handleFuncMetrics("/debug/pprof/cmdline", pprof.Cmdline)
@@ -150,26 +158,81 @@ func (s *HTTPServer) handler(enableDebug bool) http.Handler {
 		handleFuncMetrics("/debug/pprof/symbol", pprof.Symbol)
 	}
 
-	// Use the custom UI dir if provided.
-	if s.agent.config.UIDir != "" {
-		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir(s.agent.config.UIDir))))
-	} else if s.agent.config.EnableUI {
-		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(assetFS())))
+	if s.IsUIEnabled() {
+		legacy_ui, err := strconv.ParseBool(os.Getenv("CONSUL_UI_LEGACY"))
+		if err != nil {
+			legacy_ui = false
+		}
+		var uifs http.FileSystem
+
+		// Use the custom UI dir if provided.
+		if s.agent.config.UIDir != "" {
+			uifs = http.Dir(s.agent.config.UIDir)
+		} else {
+			fs := assetFS()
+
+			if legacy_ui {
+				fs.Prefix += "/v1/"
+			} else {
+				fs.Prefix += "/v2/"
+			}
+			uifs = fs
+		}
+
+		if !legacy_ui {
+			uifs = &redirectFS{fs: uifs}
+		}
+
+		mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(uifs)))
 	}
-	return mux
+
+	// Wrap the whole mux with a handler that bans URLs with non-printable
+	// characters.
+	return &wrappedMux{
+		mux:     mux,
+		handler: cleanhttp.PrintablePathCheckHandler(mux, nil),
+	}
 }
 
+// nodeName returns the node name of the agent
+func (s *HTTPServer) nodeName() string {
+	return s.agent.config.NodeName
+}
+
+// aclEndpointRE is used to find old ACL endpoints that take tokens in the URL
+// so that we can redact them. The ACL endpoints that take the token in the URL
+// are all of the form /v1/acl/<verb>/<token>, and can optionally include query
+// parameters which are indicated by a question mark. We capture the part before
+// the token, the token, and any query parameters after, and then reassemble as
+// $1<hidden>$3 (the token in $2 isn't used), which will give:
+//
+// /v1/acl/clone/foo           -> /v1/acl/clone/<hidden>
+// /v1/acl/clone/foo?token=bar -> /v1/acl/clone/<hidden>?token=<hidden>
+//
+// The query parameter in the example above is obfuscated like any other, after
+// this regular expression is applied, so the regular expression substitution
+// results in:
+//
+// /v1/acl/clone/foo?token=bar -> /v1/acl/clone/<hidden>?token=bar
+//                                ^---- $1 ----^^- $2 -^^-- $3 --^
+//
+// And then the loop that looks for parameters called "token" does the last
+// step to get to the final redacted form.
+var (
+	aclEndpointRE = regexp.MustCompile("^(/v1/acl/[^/]+/)([^?]+)([?]?.*)$")
+)
+
 // wrap is used to wrap functions to make them more convenient
-func (s *HTTPServer) wrap(handler func(resp http.ResponseWriter, req *http.Request) (interface{}, error)) http.HandlerFunc {
+func (s *HTTPServer) wrap(handler endpoint, methods []string) http.HandlerFunc {
 	return func(resp http.ResponseWriter, req *http.Request) {
-		setHeaders(resp, s.agent.config.HTTPConfig.ResponseHeaders)
-		setTranslateAddr(resp, s.agent.config.TranslateWanAddrs)
+		setHeaders(resp, s.agent.config.HTTPResponseHeaders)
+		setTranslateAddr(resp, s.agent.config.TranslateWANAddrs)
 
 		// Obfuscate any tokens from appearing in the logs
 		formVals, err := url.ParseQuery(req.URL.RawQuery)
 		if err != nil {
 			s.agent.logger.Printf("[ERR] http: Failed to decode query: %s from=%s", err, req.RemoteAddr)
-			resp.WriteHeader(http.StatusInternalServerError) // 500
+			resp.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		logURL := req.URL.String()
@@ -182,33 +245,84 @@ func (s *HTTPServer) wrap(handler func(resp http.ResponseWriter, req *http.Reque
 				logURL = strings.Replace(logURL, token, "<hidden>", -1)
 			}
 		}
+		logURL = aclEndpointRE.ReplaceAllString(logURL, "$1<hidden>$3")
+
+		if s.blacklist.Block(req.URL.Path) {
+			errMsg := "Endpoint is blocked by agent configuration"
+			s.agent.logger.Printf("[ERR] http: Request %s %v, error: %v from=%s", req.Method, logURL, err, req.RemoteAddr)
+			resp.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(resp, errMsg)
+			return
+		}
+
+		isMethodNotAllowed := func(err error) bool {
+			_, ok := err.(MethodNotAllowedError)
+			return ok
+		}
+
+		isBadRequest := func(err error) bool {
+			_, ok := err.(BadRequestError)
+			return ok
+		}
+
+		addAllowHeader := func(methods []string) {
+			resp.Header().Add("Allow", strings.Join(methods, ","))
+		}
 
 		handleErr := func(err error) {
 			s.agent.logger.Printf("[ERR] http: Request %s %v, error: %v from=%s", req.Method, logURL, err, req.RemoteAddr)
-			code := http.StatusInternalServerError // 500
-			errMsg := err.Error()
-			if strings.Contains(errMsg, "Permission denied") || strings.Contains(errMsg, "ACL not found") {
-				code = http.StatusForbidden // 403
+			switch {
+			case acl.IsErrPermissionDenied(err) || acl.IsErrNotFound(err):
+				resp.WriteHeader(http.StatusForbidden)
+				fmt.Fprint(resp, err.Error())
+			case structs.IsErrRPCRateExceeded(err):
+				resp.WriteHeader(http.StatusTooManyRequests)
+			case isMethodNotAllowed(err):
+				// RFC2616 states that for 405 Method Not Allowed the response
+				// MUST include an Allow header containing the list of valid
+				// methods for the requested resource.
+				// https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+				addAllowHeader(err.(MethodNotAllowedError).Allow)
+				resp.WriteHeader(http.StatusMethodNotAllowed) // 405
+				fmt.Fprint(resp, err.Error())
+			case isBadRequest(err):
+				resp.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(resp, err.Error())
+			default:
+				resp.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(resp, err.Error())
 			}
-			resp.WriteHeader(code)
-			fmt.Fprint(resp, errMsg)
 		}
 
-		// TODO (slackpad) We may want to consider redacting prepared
-		// query names/IDs here since they are proxies for tokens. But,
-		// knowing one only gives you read access to service listings
-		// which is pretty trivial, so it's probably not worth the code
-		// complexity and overhead of filtering them out. You can't
-		// recover the token it's a proxy for with just the query info;
-		// you'd need the actual token (or a management token) to read
-		// that back.
-
-		// Invoke the handler
 		start := time.Now()
 		defer func() {
-			s.agent.logger.Printf("[DEBUG] http: Request %s %v (%v) from=%s", req.Method, logURL, time.Now().Sub(start), req.RemoteAddr)
+			s.agent.logger.Printf("[DEBUG] http: Request %s %v (%v) from=%s", req.Method, logURL, time.Since(start), req.RemoteAddr)
 		}()
-		obj, err := handler(resp, req)
+
+		var obj interface{}
+
+		// if this endpoint has declared methods, respond appropriately to OPTIONS requests. Otherwise let the endpoint handle that.
+		if req.Method == "OPTIONS" && len(methods) > 0 {
+			addAllowHeader(append([]string{"OPTIONS"}, methods...))
+			return
+		}
+
+		// if this endpoint has declared methods, check the request method. Otherwise let the endpoint handle that.
+		methodFound := len(methods) == 0
+		for _, method := range methods {
+			if method == req.Method {
+				methodFound = true
+				break
+			}
+		}
+
+		if !methodFound {
+			err = MethodNotAllowedError{req.Method, append([]string{"OPTIONS"}, methods...)}
+		} else {
+			// Invoke the handler
+			obj, err = handler(resp, req)
+		}
+
 		if err != nil {
 			handleErr(err)
 			return
@@ -255,7 +369,7 @@ func (s *HTTPServer) IsUIEnabled() bool {
 func (s *HTTPServer) Index(resp http.ResponseWriter, req *http.Request) {
 	// Check if this is a non-index path
 	if req.URL.Path != "/" {
-		resp.WriteHeader(http.StatusNotFound) // 404
+		resp.WriteHeader(http.StatusNotFound)
 		return
 	}
 
@@ -272,6 +386,13 @@ func (s *HTTPServer) Index(resp http.ResponseWriter, req *http.Request) {
 
 // decodeBody is used to decode a JSON request body
 func decodeBody(req *http.Request, out interface{}, cb func(interface{}) error) error {
+	// This generally only happens in tests since real HTTP requests set
+	// a non-nil body with no content. We guard against it anyways to prevent
+	// a panic. The EOF response is the same behavior as an empty reader.
+	if req.Body == nil {
+		return io.EOF
+	}
+
 	var raw interface{}
 	dec := json.NewDecoder(req.Body)
 	if err := dec.Decode(&raw); err != nil {
@@ -297,6 +418,14 @@ func setTranslateAddr(resp http.ResponseWriter, active bool) {
 
 // setIndex is used to set the index response header
 func setIndex(resp http.ResponseWriter, index uint64) {
+	// If we ever return X-Consul-Index of 0 blocking clients will go into a busy
+	// loop and hammer us since ?index=0 will never block. It's always safe to
+	// return index=1 since the very first Raft write is always an internal one
+	// writing the raft config for the cluster so no user-facing blocking query
+	// will ever legitimately have an X-Consul-Index of 1.
+	if index == 0 {
+		index = 1
+	}
 	resp.Header().Set("X-Consul-Index", strconv.FormatUint(index, 10))
 }
 
@@ -307,6 +436,12 @@ func setKnownLeader(resp http.ResponseWriter, known bool) {
 		s = "false"
 	}
 	resp.Header().Set("X-Consul-KnownLeader", s)
+}
+
+func setConsistency(resp http.ResponseWriter, consistency string) {
+	if consistency != "" {
+		resp.Header().Set("X-Consul-Effective-Consistency", consistency)
+	}
 }
 
 // setLastContact is used to set the last contact header
@@ -323,6 +458,16 @@ func setMeta(resp http.ResponseWriter, m *structs.QueryMeta) {
 	setIndex(resp, m.Index)
 	setLastContact(resp, m.LastContact)
 	setKnownLeader(resp, m.KnownLeader)
+	setConsistency(resp, m.ConsistencyLevel)
+}
+
+// setCacheMeta sets http response headers to indicate cache status.
+func setCacheMeta(resp http.ResponseWriter, m *cache.ResultMeta) {
+	str := "MISS"
+	if m != nil && m.Hit {
+		str = "HIT"
+	}
+	resp.Header().Set("X-Cache", str)
 }
 
 // setHeaders is used to set canonical response header fields
@@ -339,7 +484,7 @@ func parseWait(resp http.ResponseWriter, req *http.Request, b *structs.QueryOpti
 	if wait := query.Get("wait"); wait != "" {
 		dur, err := time.ParseDuration(wait)
 		if err != nil {
-			resp.WriteHeader(http.StatusBadRequest) // 400
+			resp.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(resp, "Invalid wait time")
 			return true
 		}
@@ -348,7 +493,7 @@ func parseWait(resp http.ResponseWriter, req *http.Request, b *structs.QueryOpti
 	if idx := query.Get("index"); idx != "" {
 		index, err := strconv.ParseUint(idx, 10, 64)
 		if err != nil {
-			resp.WriteHeader(http.StatusBadRequest) // 400
+			resp.WriteHeader(http.StatusBadRequest)
 			fmt.Fprint(resp, "Invalid index")
 			return true
 		}
@@ -359,16 +504,45 @@ func parseWait(resp http.ResponseWriter, req *http.Request, b *structs.QueryOpti
 
 // parseConsistency is used to parse the ?stale and ?consistent query params.
 // Returns true on error
-func parseConsistency(resp http.ResponseWriter, req *http.Request, b *structs.QueryOptions) bool {
+func (s *HTTPServer) parseConsistency(resp http.ResponseWriter, req *http.Request, b *structs.QueryOptions) bool {
 	query := req.URL.Query()
+	defaults := true
 	if _, ok := query["stale"]; ok {
 		b.AllowStale = true
+		defaults = false
 	}
 	if _, ok := query["consistent"]; ok {
 		b.RequireConsistent = true
+		defaults = false
+	}
+	if _, ok := query["leader"]; ok {
+		defaults = false
+	}
+	if maxStale := query.Get("max_stale"); maxStale != "" {
+		dur, err := time.ParseDuration(maxStale)
+		if err != nil {
+			resp.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(resp, "Invalid max_stale value %q", maxStale)
+			return true
+		}
+		b.MaxStaleDuration = dur
+		if dur.Nanoseconds() > 0 {
+			b.AllowStale = true
+			defaults = false
+		}
+	}
+	// No specific Consistency has been specified by caller
+	if defaults {
+		path := req.URL.Path
+		if strings.HasPrefix(path, "/v1/catalog") || strings.HasPrefix(path, "/v1/health") {
+			if s.agent.config.DiscoveryMaxStale.Nanoseconds() > 0 {
+				b.MaxStaleDuration = s.agent.config.DiscoveryMaxStale
+				b.AllowStale = true
+			}
+		}
 	}
 	if b.AllowStale && b.RequireConsistent {
-		resp.WriteHeader(http.StatusBadRequest) // 400
+		resp.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(resp, "Cannot specify ?stale with ?consistent, conflicting semantics.")
 		return true
 	}
@@ -397,7 +571,30 @@ func (s *HTTPServer) parseToken(req *http.Request, token *string) {
 	}
 
 	// Set the default ACLToken
-	*token = s.agent.config.ACLToken
+	*token = s.agent.tokens.UserToken()
+}
+
+func sourceAddrFromRequest(req *http.Request) string {
+	xff := req.Header.Get("X-Forwarded-For")
+	forwardHosts := strings.Split(xff, ",")
+	if len(forwardHosts) > 0 {
+		forwardIp := net.ParseIP(strings.TrimSpace(forwardHosts[0]))
+		if forwardIp != nil {
+			return forwardIp.String()
+		}
+	}
+
+	host, _, err := net.SplitHostPort(req.RemoteAddr)
+	if err != nil {
+		return ""
+	}
+
+	ip := net.ParseIP(host)
+	if ip != nil {
+		return ip.String()
+	} else {
+		return ""
+	}
 }
 
 // parseSource is used to parse the ?near=<node> query parameter, used for
@@ -405,6 +602,7 @@ func (s *HTTPServer) parseToken(req *http.Request, token *string) {
 // DC in the request, if given, or else the agent's DC.
 func (s *HTTPServer) parseSource(req *http.Request, source *structs.QuerySource) {
 	s.parseDC(req, &source.Datacenter)
+	source.Ip = sourceAddrFromRequest(req)
 	if node := req.URL.Query().Get("near"); node != "" {
 		if node == "_agent" {
 			source.Node = s.agent.config.NodeName
@@ -433,7 +631,7 @@ func (s *HTTPServer) parseMetaFilter(req *http.Request) map[string]string {
 func (s *HTTPServer) parse(resp http.ResponseWriter, req *http.Request, dc *string, b *structs.QueryOptions) bool {
 	s.parseDC(req, dc)
 	s.parseToken(req, &b.Token)
-	if parseConsistency(resp, req, b) {
+	if s.parseConsistency(resp, req, b) {
 		return true
 	}
 	return parseWait(resp, req, b)

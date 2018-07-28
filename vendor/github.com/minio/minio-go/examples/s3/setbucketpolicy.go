@@ -1,7 +1,8 @@
 // +build ignore
 
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015, 2016 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * Copyright 2015-2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +23,6 @@ import (
 	"log"
 
 	"github.com/minio/minio-go"
-	"github.com/minio/minio-go/pkg/policy"
 )
 
 func main() {
@@ -41,14 +41,11 @@ func main() {
 
 	// s3Client.TraceOn(os.Stderr)
 
-	// Description of policy input.
-	// policy.BucketPolicyNone - Remove any previously applied bucket policy at a prefix.
-	// policy.BucketPolicyReadOnly - Set read-only operations at a prefix.
-	// policy.BucketPolicyWriteOnly - Set write-only operations at a prefix.
-	// policy.BucketPolicyReadWrite - Set read-write operations at a prefix.
-	err = s3Client.SetBucketPolicy("my-bucketname", "my-objectprefix", policy.BucketPolicyReadWrite)
+	// Create policy
+	policy := `{"Version": "2012-10-17","Statement": [{"Action": ["s3:GetObject"],"Effect": "Allow","Principal": {"AWS": ["*"]},"Resource": ["arn:aws:s3:::my-bucketname/*"],"Sid": ""}]}`
+
+	err = s3Client.SetBucketPolicy("my-bucketname", policy)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	log.Println("Success")
 }

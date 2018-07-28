@@ -5,14 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/lib"
 	"github.com/hashicorp/consul/testrpc"
 	"github.com/hashicorp/net-rpc-msgpackrpc"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestHealth_ChecksInState(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -53,12 +55,13 @@ func TestHealth_ChecksInState(t *testing.T) {
 	if checks[0].Name != "memory utilization" {
 		t.Fatalf("Bad: %v", checks[0])
 	}
-	if checks[1].CheckID != SerfCheckID {
+	if checks[1].CheckID != structs.SerfCheckID {
 		t.Fatalf("Bad: %v", checks[1])
 	}
 }
 
 func TestHealth_ChecksInState_NodeMetaFilter(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -154,6 +157,7 @@ func TestHealth_ChecksInState_NodeMetaFilter(t *testing.T) {
 }
 
 func TestHealth_ChecksInState_DistanceSort(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -168,8 +172,8 @@ func TestHealth_ChecksInState_DistanceSort(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	updates := structs.Coordinates{
-		{"foo", lib.GenerateCoordinate(1 * time.Millisecond)},
-		{"bar", lib.GenerateCoordinate(2 * time.Millisecond)},
+		{Node: "foo", Coord: lib.GenerateCoordinate(1 * time.Millisecond)},
+		{Node: "bar", Coord: lib.GenerateCoordinate(2 * time.Millisecond)},
 	}
 	if err := s1.fsm.State().CoordinateBatchUpdate(3, updates); err != nil {
 		t.Fatalf("err: %v", err)
@@ -231,6 +235,7 @@ func TestHealth_ChecksInState_DistanceSort(t *testing.T) {
 }
 
 func TestHealth_NodeChecks(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -272,6 +277,7 @@ func TestHealth_NodeChecks(t *testing.T) {
 }
 
 func TestHealth_ServiceChecks(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -318,6 +324,7 @@ func TestHealth_ServiceChecks(t *testing.T) {
 }
 
 func TestHealth_ServiceChecks_NodeMetaFilter(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -423,6 +430,7 @@ func TestHealth_ServiceChecks_NodeMetaFilter(t *testing.T) {
 }
 
 func TestHealth_ServiceChecks_DistanceSort(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -437,8 +445,8 @@ func TestHealth_ServiceChecks_DistanceSort(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	updates := structs.Coordinates{
-		{"foo", lib.GenerateCoordinate(1 * time.Millisecond)},
-		{"bar", lib.GenerateCoordinate(2 * time.Millisecond)},
+		{Node: "foo", Coord: lib.GenerateCoordinate(1 * time.Millisecond)},
+		{Node: "bar", Coord: lib.GenerateCoordinate(2 * time.Millisecond)},
 	}
 	if err := s1.fsm.State().CoordinateBatchUpdate(3, updates); err != nil {
 		t.Fatalf("err: %v", err)
@@ -511,6 +519,7 @@ func TestHealth_ServiceChecks_DistanceSort(t *testing.T) {
 }
 
 func TestHealth_ServiceNodes(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -594,6 +603,7 @@ func TestHealth_ServiceNodes(t *testing.T) {
 }
 
 func TestHealth_ServiceNodes_NodeMetaFilter(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -724,6 +734,7 @@ func TestHealth_ServiceNodes_NodeMetaFilter(t *testing.T) {
 }
 
 func TestHealth_ServiceNodes_DistanceSort(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -738,8 +749,8 @@ func TestHealth_ServiceNodes_DistanceSort(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	updates := structs.Coordinates{
-		{"foo", lib.GenerateCoordinate(1 * time.Millisecond)},
-		{"bar", lib.GenerateCoordinate(2 * time.Millisecond)},
+		{Node: "foo", Coord: lib.GenerateCoordinate(1 * time.Millisecond)},
+		{Node: "bar", Coord: lib.GenerateCoordinate(2 * time.Millisecond)},
 	}
 	if err := s1.fsm.State().CoordinateBatchUpdate(3, updates); err != nil {
 		t.Fatalf("err: %v", err)
@@ -811,7 +822,108 @@ func TestHealth_ServiceNodes_DistanceSort(t *testing.T) {
 	}
 }
 
+func TestHealth_ServiceNodes_ConnectProxy_ACL(t *testing.T) {
+	t.Parallel()
+
+	assert := assert.New(t)
+	dir1, s1 := testServerWithConfig(t, func(c *Config) {
+		c.ACLDatacenter = "dc1"
+		c.ACLMasterToken = "root"
+		c.ACLDefaultPolicy = "deny"
+		c.ACLEnforceVersion8 = false
+	})
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+	codec := rpcClient(t, s1)
+	defer codec.Close()
+
+	testrpc.WaitForLeader(t, s1.RPC, "dc1")
+
+	// Create the ACL.
+	arg := structs.ACLRequest{
+		Datacenter: "dc1",
+		Op:         structs.ACLSet,
+		ACL: structs.ACL{
+			Name: "User token",
+			Type: structs.ACLTypeClient,
+			Rules: `
+service "foo" {
+	policy = "write"
+}
+`,
+		},
+		WriteRequest: structs.WriteRequest{Token: "root"},
+	}
+	var token string
+	assert.Nil(msgpackrpc.CallWithCodec(codec, "ACL.Apply", arg, &token))
+
+	{
+		var out struct{}
+
+		// Register a service
+		args := structs.TestRegisterRequestProxy(t)
+		args.WriteRequest.Token = "root"
+		args.Service.ID = "foo-proxy-0"
+		args.Service.Service = "foo-proxy"
+		args.Service.ProxyDestination = "bar"
+		args.Check = &structs.HealthCheck{
+			Name:      "proxy",
+			Status:    api.HealthPassing,
+			ServiceID: args.Service.ID,
+		}
+		assert.Nil(msgpackrpc.CallWithCodec(codec, "Catalog.Register", &args, &out))
+
+		// Register a service
+		args = structs.TestRegisterRequestProxy(t)
+		args.WriteRequest.Token = "root"
+		args.Service.Service = "foo-proxy"
+		args.Service.ProxyDestination = "foo"
+		args.Check = &structs.HealthCheck{
+			Name:      "proxy",
+			Status:    api.HealthPassing,
+			ServiceID: args.Service.Service,
+		}
+		assert.Nil(msgpackrpc.CallWithCodec(codec, "Catalog.Register", &args, &out))
+
+		// Register a service
+		args = structs.TestRegisterRequestProxy(t)
+		args.WriteRequest.Token = "root"
+		args.Service.Service = "another-proxy"
+		args.Service.ProxyDestination = "foo"
+		args.Check = &structs.HealthCheck{
+			Name:      "proxy",
+			Status:    api.HealthPassing,
+			ServiceID: args.Service.Service,
+		}
+		assert.Nil(msgpackrpc.CallWithCodec(codec, "Catalog.Register", &args, &out))
+	}
+
+	// List w/ token. This should disallow because we don't have permission
+	// to read "bar"
+	req := structs.ServiceSpecificRequest{
+		Connect:      true,
+		Datacenter:   "dc1",
+		ServiceName:  "bar",
+		QueryOptions: structs.QueryOptions{Token: token},
+	}
+	var resp structs.IndexedCheckServiceNodes
+	assert.Nil(msgpackrpc.CallWithCodec(codec, "Health.ServiceNodes", &req, &resp))
+	assert.Len(resp.Nodes, 0)
+
+	// List w/ token. This should work since we're requesting "foo", but should
+	// also only contain the proxies with names that adhere to our ACL.
+	req = structs.ServiceSpecificRequest{
+		Connect:      true,
+		Datacenter:   "dc1",
+		ServiceName:  "foo",
+		QueryOptions: structs.QueryOptions{Token: token},
+	}
+	assert.Nil(msgpackrpc.CallWithCodec(codec, "Health.ServiceNodes", &req, &resp))
+	assert.Len(resp.Nodes, 1)
+}
+
 func TestHealth_NodeChecks_FilterACL(t *testing.T) {
+	t.Parallel()
 	dir, token, srv, codec := testACLFilterServer(t)
 	defer os.RemoveAll(dir)
 	defer srv.Shutdown()
@@ -847,6 +959,7 @@ func TestHealth_NodeChecks_FilterACL(t *testing.T) {
 }
 
 func TestHealth_ServiceChecks_FilterACL(t *testing.T) {
+	t.Parallel()
 	dir, token, srv, codec := testACLFilterServer(t)
 	defer os.RemoveAll(dir)
 	defer srv.Shutdown()
@@ -889,6 +1002,7 @@ func TestHealth_ServiceChecks_FilterACL(t *testing.T) {
 }
 
 func TestHealth_ServiceNodes_FilterACL(t *testing.T) {
+	t.Parallel()
 	dir, token, srv, codec := testACLFilterServer(t)
 	defer os.RemoveAll(dir)
 	defer srv.Shutdown()
@@ -924,6 +1038,7 @@ func TestHealth_ServiceNodes_FilterACL(t *testing.T) {
 }
 
 func TestHealth_ChecksInState_FilterACL(t *testing.T) {
+	t.Parallel()
 	dir, token, srv, codec := testACLFilterServer(t)
 	defer os.RemoveAll(dir)
 	defer srv.Shutdown()

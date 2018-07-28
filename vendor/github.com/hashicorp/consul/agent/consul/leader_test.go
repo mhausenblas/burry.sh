@@ -2,18 +2,22 @@ package consul
 
 import (
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/connect"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/testrpc"
 	"github.com/hashicorp/consul/testutil/retry"
 	"github.com/hashicorp/net-rpc-msgpackrpc"
 	"github.com/hashicorp/serf/serf"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLeader_RegisterMember(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -52,10 +56,10 @@ func TestLeader_RegisterMember(t *testing.T) {
 	if len(checks) != 1 {
 		t.Fatalf("client missing check")
 	}
-	if checks[0].CheckID != SerfCheckID {
+	if checks[0].CheckID != structs.SerfCheckID {
 		t.Fatalf("bad check: %v", checks[0])
 	}
-	if checks[0].Name != SerfCheckName {
+	if checks[0].Name != structs.SerfCheckName {
 		t.Fatalf("bad check: %v", checks[0])
 	}
 	if checks[0].Status != api.HealthPassing {
@@ -82,6 +86,7 @@ func TestLeader_RegisterMember(t *testing.T) {
 }
 
 func TestLeader_FailedMember(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -123,10 +128,10 @@ func TestLeader_FailedMember(t *testing.T) {
 	if len(checks) != 1 {
 		t.Fatalf("client missing check")
 	}
-	if checks[0].CheckID != SerfCheckID {
+	if checks[0].CheckID != structs.SerfCheckID {
 		t.Fatalf("bad check: %v", checks[0])
 	}
-	if checks[0].Name != SerfCheckName {
+	if checks[0].Name != structs.SerfCheckName {
 		t.Fatalf("bad check: %v", checks[0])
 	}
 
@@ -142,6 +147,7 @@ func TestLeader_FailedMember(t *testing.T) {
 }
 
 func TestLeader_LeftMember(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -187,6 +193,7 @@ func TestLeader_LeftMember(t *testing.T) {
 	})
 }
 func TestLeader_ReapMember(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -246,7 +253,81 @@ func TestLeader_ReapMember(t *testing.T) {
 	}
 }
 
+func TestLeader_ReapServer(t *testing.T) {
+	t.Parallel()
+	dir1, s1 := testServerWithConfig(t, func(c *Config) {
+		c.ACLDatacenter = "dc1"
+		c.ACLMasterToken = "root"
+		c.ACLDefaultPolicy = "allow"
+		c.ACLEnforceVersion8 = true
+		c.Bootstrap = true
+	})
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+
+	dir2, s2 := testServerWithConfig(t, func(c *Config) {
+		c.ACLDatacenter = "dc1"
+		c.ACLMasterToken = "root"
+		c.ACLDefaultPolicy = "allow"
+		c.ACLEnforceVersion8 = true
+		c.Bootstrap = false
+	})
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
+
+	dir3, s3 := testServerWithConfig(t, func(c *Config) {
+		c.ACLDatacenter = "dc1"
+		c.ACLMasterToken = "root"
+		c.ACLDefaultPolicy = "allow"
+		c.ACLEnforceVersion8 = true
+		c.Bootstrap = false
+	})
+	defer os.RemoveAll(dir3)
+	defer s3.Shutdown()
+
+	// Try to join
+	joinLAN(t, s1, s2)
+	joinLAN(t, s1, s3)
+
+	testrpc.WaitForLeader(t, s1.RPC, "dc1")
+	state := s1.fsm.State()
+
+	// s3 should be registered
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(s3.config.NodeName)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node == nil {
+			r.Fatal("client not registered")
+		}
+	})
+
+	// call reconcileReaped with a map that does not contain s3
+	knownMembers := make(map[string]struct{})
+	knownMembers[s1.config.NodeName] = struct{}{}
+	knownMembers[s2.config.NodeName] = struct{}{}
+
+	err := s1.reconcileReaped(knownMembers)
+
+	if err != nil {
+		t.Fatalf("Unexpected error :%v", err)
+	}
+	// s3 should be deregistered
+	retry.Run(t, func(r *retry.R) {
+		_, node, err := state.GetNode(s3.config.NodeName)
+		if err != nil {
+			r.Fatalf("err: %v", err)
+		}
+		if node != nil {
+			r.Fatalf("server with id %v should not be registered", s3.config.NodeID)
+		}
+	})
+
+}
+
 func TestLeader_Reconcile_ReapMember(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -265,8 +346,8 @@ func TestLeader_Reconcile_ReapMember(t *testing.T) {
 		Address:    "127.1.1.1",
 		Check: &structs.HealthCheck{
 			Node:    "no-longer-around",
-			CheckID: SerfCheckID,
-			Name:    SerfCheckName,
+			CheckID: structs.SerfCheckID,
+			Name:    structs.SerfCheckName,
 			Status:  api.HealthCritical,
 		},
 		WriteRequest: structs.WriteRequest{
@@ -295,6 +376,7 @@ func TestLeader_Reconcile_ReapMember(t *testing.T) {
 }
 
 func TestLeader_Reconcile(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -334,6 +416,7 @@ func TestLeader_Reconcile(t *testing.T) {
 }
 
 func TestLeader_Reconcile_Races(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -361,7 +444,7 @@ func TestLeader_Reconcile_Races(t *testing.T) {
 	})
 
 	// Add in some metadata via the catalog (as if the agent synced it
-	// there). We also set the serfHealth check to failing so the reconile
+	// there). We also set the serfHealth check to failing so the reconcile
 	// will attempt to flip it back
 	req := structs.RegisterRequest{
 		Datacenter: s1.config.Datacenter,
@@ -371,8 +454,8 @@ func TestLeader_Reconcile_Races(t *testing.T) {
 		NodeMeta:   map[string]string{"hello": "world"},
 		Check: &structs.HealthCheck{
 			Node:    c1.config.NodeName,
-			CheckID: SerfCheckID,
-			Name:    SerfCheckName,
+			CheckID: structs.SerfCheckID,
+			Name:    structs.SerfCheckName,
 			Status:  api.HealthCritical,
 			Output:  "",
 		},
@@ -423,6 +506,7 @@ func TestLeader_Reconcile_Races(t *testing.T) {
 }
 
 func TestLeader_LeftServer(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -457,9 +541,11 @@ func TestLeader_LeftServer(t *testing.T) {
 	for _, s := range servers[1:] {
 		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(s, 2)) })
 	}
+	s1.Shutdown()
 }
 
 func TestLeader_LeftLeader(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -525,6 +611,7 @@ func TestLeader_LeftLeader(t *testing.T) {
 }
 
 func TestLeader_MultiBootstrap(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -556,6 +643,7 @@ func TestLeader_MultiBootstrap(t *testing.T) {
 }
 
 func TestLeader_TombstoneGC_Reset(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServer(t)
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -617,6 +705,7 @@ func TestLeader_TombstoneGC_Reset(t *testing.T) {
 }
 
 func TestLeader_ReapTombstones(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.ACLDatacenter = "dc1"
 		c.ACLMasterToken = "root"
@@ -686,9 +775,11 @@ func TestLeader_ReapTombstones(t *testing.T) {
 }
 
 func TestLeader_RollRaftServer(t *testing.T) {
+	t.Parallel()
 	dir1, s1 := testServerWithConfig(t, func(c *Config) {
 		c.Bootstrap = true
 		c.Datacenter = "dc1"
+		c.RaftConfig.ProtocolVersion = 2
 	})
 	defer os.RemoveAll(dir1)
 	defer s1.Shutdown()
@@ -701,7 +792,11 @@ func TestLeader_RollRaftServer(t *testing.T) {
 	defer os.RemoveAll(dir2)
 	defer s2.Shutdown()
 
-	dir3, s3 := testServerDCBootstrap(t, "dc1", false)
+	dir3, s3 := testServerWithConfig(t, func(c *Config) {
+		c.Bootstrap = false
+		c.Datacenter = "dc1"
+		c.RaftConfig.ProtocolVersion = 2
+	})
 	defer os.RemoveAll(dir3)
 	defer s3.Shutdown()
 
@@ -720,7 +815,7 @@ func TestLeader_RollRaftServer(t *testing.T) {
 
 	for _, s := range []*Server{s1, s3} {
 		retry.Run(t, func(r *retry.R) {
-			minVer, err := ServerMinRaftProtocol(s.LANMembers())
+			minVer, err := s.autopilot.MinRaftProtocol()
 			if err != nil {
 				r.Fatal(err)
 			}
@@ -768,6 +863,7 @@ func TestLeader_RollRaftServer(t *testing.T) {
 }
 
 func TestLeader_ChangeServerID(t *testing.T) {
+	t.Parallel()
 	conf := func(c *Config) {
 		c.Bootstrap = false
 		c.BootstrapExpect = 3
@@ -788,10 +884,9 @@ func TestLeader_ChangeServerID(t *testing.T) {
 
 	servers := []*Server{s1, s2, s3}
 
-	// Try to join
+	// Try to join and wait for all servers to get promoted
 	joinLAN(t, s2, s1)
 	joinLAN(t, s3, s1)
-
 	for _, s := range servers {
 		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(s, 3)) })
 	}
@@ -826,8 +921,227 @@ func TestLeader_ChangeServerID(t *testing.T) {
 	joinLAN(t, s4, s1)
 	servers[2] = s4
 
+	// While integrating #3327 it uncovered that this test was flaky. The
+	// connection pool would use the same TCP connection to the old server
+	// which would give EOF errors to the autopilot health check RPC call.
+	// To make this more reliable we changed the connection pool to throw
+	// away the connection if it sees an EOF error, since there's no way
+	// that connection is going to work again. This made this test reliable
+	// since it will make a new connection to s4.
+
 	// Make sure the dead server is removed and we're back to 3 total peers
-	for _, s := range servers {
-		retry.Run(t, func(r *retry.R) { r.Check(wantPeers(s, 3)) })
+	retry.Run(t, func(r *retry.R) {
+		r.Check(wantRaft(servers))
+		for _, s := range servers {
+			r.Check(wantPeers(s, 3))
+		}
+	})
+}
+
+func TestLeader_ACL_Initialization(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		build     string
+		master    string
+		init      bool
+		bootstrap bool
+	}{
+		{"old version, no master", "0.8.0", "", false, false},
+		{"old version, master", "0.8.0", "root", false, false},
+		{"new version, no master", "0.9.1", "", true, true},
+		{"new version, master", "0.9.1", "root", true, false},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := func(c *Config) {
+				c.Build = tt.build
+				c.Bootstrap = true
+				c.Datacenter = "dc1"
+				c.ACLDatacenter = "dc1"
+				c.ACLMasterToken = tt.master
+			}
+			dir1, s1 := testServerWithConfig(t, conf)
+			defer os.RemoveAll(dir1)
+			defer s1.Shutdown()
+			testrpc.WaitForLeader(t, s1.RPC, "dc1")
+
+			if tt.master != "" {
+				_, master, err := s1.fsm.State().ACLGet(nil, tt.master)
+				if err != nil {
+					t.Fatalf("err: %v", err)
+				}
+				if master == nil {
+					t.Fatalf("master token wasn't created")
+				}
+			}
+
+			_, anon, err := s1.fsm.State().ACLGet(nil, anonymousToken)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if anon == nil {
+				t.Fatalf("anonymous token wasn't created")
+			}
+
+			bs, err := s1.fsm.State().ACLGetBootstrap()
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if !tt.init {
+				if bs != nil {
+					t.Fatalf("bootstrap should not be initialized")
+				}
+			} else {
+				if bs == nil {
+					t.Fatalf("bootstrap should be initialized")
+				}
+				if got, want := bs.AllowBootstrap, tt.bootstrap; got != want {
+					t.Fatalf("got %v want %v", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestLeader_CARootPruning(t *testing.T) {
+	t.Parallel()
+
+	caRootExpireDuration = 500 * time.Millisecond
+	caRootPruneInterval = 200 * time.Millisecond
+
+	require := require.New(t)
+	dir1, s1 := testServer(t)
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+	codec := rpcClient(t, s1)
+	defer codec.Close()
+
+	testrpc.WaitForLeader(t, s1.RPC, "dc1")
+
+	// Get the current root
+	rootReq := &structs.DCSpecificRequest{
+		Datacenter: "dc1",
+	}
+	var rootList structs.IndexedCARoots
+	require.Nil(msgpackrpc.CallWithCodec(codec, "ConnectCA.Roots", rootReq, &rootList))
+	require.Len(rootList.Roots, 1)
+	oldRoot := rootList.Roots[0]
+
+	// Update the provider config to use a new private key, which should
+	// cause a rotation.
+	_, newKey, err := connect.GeneratePrivateKey()
+	require.NoError(err)
+	newConfig := &structs.CAConfiguration{
+		Provider: "consul",
+		Config: map[string]interface{}{
+			"PrivateKey":     newKey,
+			"RootCert":       "",
+			"RotationPeriod": 90 * 24 * time.Hour,
+		},
+	}
+	{
+		args := &structs.CARequest{
+			Datacenter: "dc1",
+			Config:     newConfig,
+		}
+		var reply interface{}
+
+		require.NoError(msgpackrpc.CallWithCodec(codec, "ConnectCA.ConfigurationSet", args, &reply))
+	}
+
+	// Should have 2 roots now.
+	_, roots, err := s1.fsm.State().CARoots(nil)
+	require.NoError(err)
+	require.Len(roots, 2)
+
+	time.Sleep(caRootExpireDuration * 2)
+
+	// Now the old root should be pruned.
+	_, roots, err = s1.fsm.State().CARoots(nil)
+	require.NoError(err)
+	require.Len(roots, 1)
+	require.True(roots[0].Active)
+	require.NotEqual(roots[0].ID, oldRoot.ID)
+}
+
+func TestLeader_PersistIntermediateCAs(t *testing.T) {
+	t.Parallel()
+
+	require := require.New(t)
+	dir1, s1 := testServer(t)
+	defer os.RemoveAll(dir1)
+	defer s1.Shutdown()
+	codec := rpcClient(t, s1)
+	defer codec.Close()
+
+	dir2, s2 := testServerDCBootstrap(t, "dc1", false)
+	defer os.RemoveAll(dir2)
+	defer s2.Shutdown()
+
+	dir3, s3 := testServerDCBootstrap(t, "dc1", false)
+	defer os.RemoveAll(dir3)
+	defer s3.Shutdown()
+
+	joinLAN(t, s2, s1)
+	joinLAN(t, s3, s1)
+
+	testrpc.WaitForLeader(t, s1.RPC, "dc1")
+
+	// Get the current root
+	rootReq := &structs.DCSpecificRequest{
+		Datacenter: "dc1",
+	}
+	var rootList structs.IndexedCARoots
+	require.Nil(msgpackrpc.CallWithCodec(codec, "ConnectCA.Roots", rootReq, &rootList))
+	require.Len(rootList.Roots, 1)
+
+	// Update the provider config to use a new private key, which should
+	// cause a rotation.
+	_, newKey, err := connect.GeneratePrivateKey()
+	require.NoError(err)
+	newConfig := &structs.CAConfiguration{
+		Provider: "consul",
+		Config: map[string]interface{}{
+			"PrivateKey":     newKey,
+			"RootCert":       "",
+			"RotationPeriod": 90 * 24 * time.Hour,
+		},
+	}
+	{
+		args := &structs.CARequest{
+			Datacenter: "dc1",
+			Config:     newConfig,
+		}
+		var reply interface{}
+
+		require.NoError(msgpackrpc.CallWithCodec(codec, "ConnectCA.ConfigurationSet", args, &reply))
+	}
+
+	// Get the active root before leader change.
+	_, root := s1.getCAProvider()
+	require.Len(root.IntermediateCerts, 1)
+
+	// Force a leader change and make sure the root CA values are preserved.
+	s1.Leave()
+	s1.Shutdown()
+
+	retry.Run(t, func(r *retry.R) {
+		var leader *Server
+		for _, s := range []*Server{s2, s3} {
+			if s.IsLeader() {
+				leader = s
+				break
+			}
+		}
+		if leader == nil {
+			r.Fatal("no leader")
+		}
+
+		_, newLeaderRoot := leader.getCAProvider()
+		if !reflect.DeepEqual(newLeaderRoot, root) {
+			r.Fatalf("got %v, want %v", newLeaderRoot, root)
+		}
+	})
 }

@@ -6,13 +6,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/consul/api"
 )
 
 // ServiceSummary is used to summarize a service
 type ServiceSummary struct {
+	Kind           structs.ServiceKind `json:",omitempty"`
 	Name           string
+	Tags           []string
 	Nodes          []string
 	ChecksPassing  int
 	ChecksWarning  int
@@ -68,7 +70,7 @@ func (s *HTTPServer) UINodeInfo(resp http.ResponseWriter, req *http.Request) (in
 	// Verify we have some DC, or use the default
 	args.Node = strings.TrimPrefix(req.URL.Path, "/v1/internal/ui/node/")
 	if args.Node == "" {
-		resp.WriteHeader(400)
+		resp.WriteHeader(http.StatusBadRequest)
 		fmt.Fprint(resp, "Missing node name")
 		return nil, nil
 	}
@@ -97,6 +99,8 @@ RPC:
 		}
 		return info, nil
 	}
+
+	resp.WriteHeader(http.StatusNotFound)
 	return nil, nil
 }
 
@@ -145,7 +149,9 @@ func summarizeServices(dump structs.NodeDump) []*ServiceSummary {
 		nodeServices := make([]*ServiceSummary, len(node.Services))
 		for idx, service := range node.Services {
 			sum := getService(service.Service)
+			sum.Tags = service.Tags
 			sum.Nodes = append(sum.Nodes, node.Node)
+			sum.Kind = service.Kind
 			nodeServices[idx] = sum
 		}
 		for _, check := range node.Checks {

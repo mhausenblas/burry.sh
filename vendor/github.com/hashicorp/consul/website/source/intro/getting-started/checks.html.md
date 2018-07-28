@@ -26,29 +26,33 @@ appropriate calls to the [HTTP API](/api/health.html).
 We will use the check definition approach because, just like with
 services, definitions are the most common way to set up checks.
 
+In Consul 0.9.0 and later the agent must be configured with
+`enable_script_checks` set to true in order to enable script checks.
+
 Create two definition files in the Consul configuration directory of
 the second node:
 
 ```text
 vagrant@n2:~$ echo '{"check": {"name": "ping",
-  "script": "ping -c1 google.com >/dev/null", "interval": "30s"}}' \
+  "args": ["ping", "-c1", "google.com"], "interval": "30s"}}' \
   >/etc/consul.d/ping.json
 
 vagrant@n2:~$ echo '{"service": {"name": "web", "tags": ["rails"], "port": 80,
-  "check": {"script": "curl localhost >/dev/null 2>&1", "interval": "10s"}}}' \
+  "check": {"args": ["curl", "localhost"], "interval": "10s"}}}' \
   >/etc/consul.d/web.json
 ```
 
 The first definition adds a host-level check named "ping". This check runs
 on a 30 second interval, invoking `ping -c1 google.com`. On a `script`-based
 health check, the check runs as the same user that started the Consul process.
-If the command exits with a non-zero exit code, then the node will be flagged
-unhealthy. This is the contract for any `script`-based health check.
+If the command exits with an exit code >= 2, then the check will be flagged as
+failing and the service will be considered unhealthy. This is the contract
+for any `script`-based health check.
 
 The second command modifies the service named `web`, adding a check that sends a
 request every 10 seconds via curl to verify that the web server is accessible.
-As with the host-level health check, if the script exits with a non-zero exit code,
-the service will be flagged unhealthy.
+As with the host-level health check, if the script exits with an exit code >= 2,
+the check will be flagged as failing and the service will be considered unhealthy.
 
 Now, restart the second agent, reload it with `consul reload`, or send it a `SIGHUP` signal. You should see the
 following log lines:
@@ -75,7 +79,7 @@ can be run on either node):
 
 ```text
 vagrant@n1:~$ curl http://localhost:8500/v1/health/state/critical
-[{"Node":"agent-two","CheckID":"service:web","Name":"Service 'web' check","Status":"critical","Notes":"","ServiceID":"web","ServiceName":"web"}]
+[{"Node":"agent-two","CheckID":"service:web","Name":"Service 'web' check","Status":"critical","Notes":"","ServiceID":"web","ServiceName":"web","ServiceTags":["rails"]}]
 ```
 
 We can see that there is only a single check, our `web` service check, in the

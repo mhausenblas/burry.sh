@@ -25,7 +25,12 @@ Consul provides several key features:
 * **Multi-Datacenter** - Consul is built to be datacenter aware, and can
   support any number of regions without complex configuration.
 
-Consul runs on Linux, Mac OS X, FreeBSD, Solaris, and Windows.
+* **Service Segmentation** - Consul Connect enables secure service-to-service 
+communication with automatic TLS encryption and identity-based authorization.
+
+Consul runs on Linux, Mac OS X, FreeBSD, Solaris, and Windows. A commercial
+version called [Consul Enterprise](https://www.hashicorp.com/products/consul)
+is also available.
 
 ## Quick Start
 
@@ -42,7 +47,7 @@ https://www.consul.io/docs
 ## Developing Consul
 
 If you wish to work on Consul itself, you'll first need [Go](https://golang.org)
-installed (version 1.8+ is _required_). Make sure you have Go properly installed,
+installed (version 1.9+ is _required_). Make sure you have Go properly installed,
 including setting up your [GOPATH](https://golang.org/doc/code.html#GOPATH).
 
 Next, clone this repository into `$GOPATH/src/github.com/hashicorp/consul` and
@@ -59,7 +64,9 @@ $ bin/consul
 
 *Note: `make` will also place a copy of the binary in the first part of your `$GOPATH`.*
 
-You can run tests by typing `make test`.
+You can run tests by typing `make test`. The test suite may fail if
+over-parallelized, so if you are seeing stochastic failures try
+`GOTEST_FLAGS="-p 2 -parallel 2" make test`.
 
 If you make any changes to the code, run `make format` in order to automatically
 format the code according to Go standards.
@@ -67,4 +74,5 @@ format the code according to Go standards.
 ## Vendoring
 
 Consul currently uses [govendor](https://github.com/kardianos/govendor) for
-vendoring.
+vendoring and [vendorfmt](https://github.com/magiconair/vendorfmt) for formatting
+`vendor.json` to a more merge-friendly "one line per package" format.

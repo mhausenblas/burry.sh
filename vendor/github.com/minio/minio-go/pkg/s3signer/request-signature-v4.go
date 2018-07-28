@@ -1,5 +1,6 @@
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2015 Minio, Inc.
+ * Minio Go Library for Amazon S3 Compatible Cloud Storage
+ * Copyright 2015-2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -143,7 +144,7 @@ func getCanonicalHeaders(req http.Request, ignoredHeaders map[string]bool) strin
 		buf.WriteByte(':')
 		switch {
 		case k == "host":
-			buf.WriteString(req.URL.Host)
+			buf.WriteString(getHostAddr(&req))
 			fallthrough
 		default:
 			for idx, v := range vals[k] {
@@ -206,7 +207,7 @@ func getStringToSignV4(t time.Time, location, canonicalRequest string) string {
 
 // PreSignV4 presign the request, in accordance with
 // http://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html.
-func PreSignV4(req http.Request, accessKeyID, secretAccessKey, location string, expires int64) *http.Request {
+func PreSignV4(req http.Request, accessKeyID, secretAccessKey, sessionToken, location string, expires int64) *http.Request {
 	// Presign is not needed for anonymous credentials.
 	if accessKeyID == "" || secretAccessKey == "" {
 		return &req
@@ -228,6 +229,10 @@ func PreSignV4(req http.Request, accessKeyID, secretAccessKey, location string, 
 	query.Set("X-Amz-Expires", strconv.FormatInt(expires, 10))
 	query.Set("X-Amz-SignedHeaders", signedHeaders)
 	query.Set("X-Amz-Credential", credential)
+	// Set session token if available.
+	if sessionToken != "" {
+		query.Set("X-Amz-Security-Token", sessionToken)
+	}
 	req.URL.RawQuery = query.Encode()
 
 	// Get canonical request.
@@ -260,7 +265,7 @@ func PostPresignSignatureV4(policyBase64 string, t time.Time, secretAccessKey, l
 
 // SignV4 sign the request before Do(), in accordance with
 // http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html.
-func SignV4(req http.Request, accessKeyID, secretAccessKey, location string) *http.Request {
+func SignV4(req http.Request, accessKeyID, secretAccessKey, sessionToken, location string) *http.Request {
 	// Signature calculation is not needed for anonymous credentials.
 	if accessKeyID == "" || secretAccessKey == "" {
 		return &req
@@ -271,6 +276,11 @@ func SignV4(req http.Request, accessKeyID, secretAccessKey, location string) *ht
 
 	// Set x-amz-date.
 	req.Header.Set("X-Amz-Date", t.Format(iso8601DateFormat))
+
+	// Set session token if available.
+	if sessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", sessionToken)
+	}
 
 	// Get canonical request.
 	canonicalRequest := getCanonicalRequest(req, v4IgnoredHeaders)

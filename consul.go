@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	consul "github.com/hashicorp/consul/api"
 )
 
@@ -42,20 +42,14 @@ func visitCONSUL(path string, fn reap) {
 	qopts := consul.QueryOptions{
 		RequireConsistent: true,
 	}
-	if children, _, err := ckv.Keys(path, ",", &qopts); err != nil {
+	if children, _, err := ckv.List(path, &qopts); err != nil {
 		log.WithFields(log.Fields{"func": "visitCONSUL"}).Error(fmt.Sprintf("%s", err))
 	} else {
 		if len(children) > 1 || path == "/" { // there are children
 			log.WithFields(log.Fields{"func": "visitCONSUL"}).Debug(fmt.Sprintf("%s has %d children", path, len(children)))
 			for _, node := range children {
-				log.WithFields(log.Fields{"func": "visitCONSUL"}).Debug(fmt.Sprintf("Next visiting child %s", node))
-				visitCONSUL(node, fn)
-			}
-		} else { // we're on a leaf node
-			if path != "/" {
-				if node, _, err := ckv.Get(path, &qopts); err != nil {
-					log.WithFields(log.Fields{"func": "visitCONSUL"}).Error(fmt.Sprintf("%s", err))
-				} else {
+				log.WithFields(log.Fields{"func": "visitCONSUL"}).Debug(fmt.Sprintf("Next visiting child %s", node.Key))
+				if len(node.Value) != 0 {
 					fn("/"+node.Key, string(node.Value))
 				}
 			}
@@ -122,19 +116,6 @@ func visitCONSULReverse(path string, f os.FileInfo, err error) error {
 								log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Value: %s", c))
 								numrestored = numrestored + 1
 							}
-						}
-					}
-				}
-			} else {
-				log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as a non-leaf key", key))
-				if node, _, eerr := ckv.Get(key, &qopts); eerr != nil {
-					log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", eerr))
-				} else {
-					if node == nil { // key does not exist yet
-						p := &consul.KVPair{Key: key, Value: nil}
-						if _, kerr := ckv.Put(p, nil); kerr == nil {
-							log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Info(fmt.Sprintf("Restored %s", key))
-							numrestored = numrestored + 1
 						}
 					}
 				}

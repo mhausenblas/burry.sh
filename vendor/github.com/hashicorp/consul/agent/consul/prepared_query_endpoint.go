@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/armon/go-metrics"
+	"github.com/hashicorp/consul/acl"
 	"github.com/hashicorp/consul/agent/consul/state"
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/structs"
 	"github.com/hashicorp/go-memdb"
 	"github.com/hashicorp/go-uuid"
 )
@@ -31,7 +32,7 @@ func (p *PreparedQuery) Apply(args *structs.PreparedQueryRequest, reply *string)
 	if done, err := p.srv.forward("PreparedQuery.Apply", args, args, reply); done {
 		return err
 	}
-	defer metrics.MeasureSince([]string{"consul", "prepared-query", "apply"}, time.Now())
+	defer metrics.MeasureSince([]string{"prepared-query", "apply"}, time.Now())
 
 	// Validate the ID. We must create new IDs before applying to the Raft
 	// log since it's not deterministic.
@@ -59,7 +60,7 @@ func (p *PreparedQuery) Apply(args *structs.PreparedQueryRequest, reply *string)
 	*reply = args.Query.ID
 
 	// Get the ACL token for the request for the checks below.
-	acl, err := p.srv.resolveToken(args.Token)
+	rule, err := p.srv.resolveToken(args.Token)
 	if err != nil {
 		return err
 	}
@@ -68,9 +69,9 @@ func (p *PreparedQuery) Apply(args *structs.PreparedQueryRequest, reply *string)
 	// need to make sure they have write access for whatever they are
 	// proposing.
 	if prefix, ok := args.Query.GetACLPrefix(); ok {
-		if acl != nil && !acl.PreparedQueryWrite(prefix) {
+		if rule != nil && !rule.PreparedQueryWrite(prefix) {
 			p.srv.logger.Printf("[WARN] consul.prepared_query: Operation on prepared query '%s' denied due to ACLs", args.Query.ID)
-			return errPermissionDenied
+			return acl.ErrPermissionDenied
 		}
 	}
 
@@ -88,9 +89,9 @@ func (p *PreparedQuery) Apply(args *structs.PreparedQueryRequest, reply *string)
 		}
 
 		if prefix, ok := query.GetACLPrefix(); ok {
-			if acl != nil && !acl.PreparedQueryWrite(prefix) {
+			if rule != nil && !rule.PreparedQueryWrite(prefix) {
 				p.srv.logger.Printf("[WARN] consul.prepared_query: Operation on prepared query '%s' denied due to ACLs", args.Query.ID)
-				return errPermissionDenied
+				return acl.ErrPermissionDenied
 			}
 		}
 	}
@@ -181,7 +182,7 @@ func parseService(svc *structs.ServiceQuery) error {
 	}
 
 	// Make sure the metadata filters are valid
-	if err := structs.ValidateMetadata(svc.NodeMeta); err != nil {
+	if err := structs.ValidateMetadata(svc.NodeMeta, true); err != nil {
 		return err
 	}
 
@@ -249,7 +250,7 @@ func (p *PreparedQuery) Get(args *structs.PreparedQuerySpecificRequest,
 			// then alert the user with a permission denied error.
 			if len(reply.Queries) == 0 {
 				p.srv.logger.Printf("[WARN] consul.prepared_query: Request to get prepared query '%s' denied due to ACLs", args.QueryID)
-				return errPermissionDenied
+				return acl.ErrPermissionDenied
 			}
 
 			return nil
@@ -285,7 +286,7 @@ func (p *PreparedQuery) Explain(args *structs.PreparedQueryExecuteRequest,
 	if done, err := p.srv.forward("PreparedQuery.Explain", args, args, reply); done {
 		return err
 	}
-	defer metrics.MeasureSince([]string{"consul", "prepared-query", "explain"}, time.Now())
+	defer metrics.MeasureSince([]string{"prepared-query", "explain"}, time.Now())
 
 	// We have to do this ourselves since we are not doing a blocking RPC.
 	p.srv.setQueryMeta(&reply.QueryMeta)
@@ -297,7 +298,7 @@ func (p *PreparedQuery) Explain(args *structs.PreparedQueryExecuteRequest,
 
 	// Try to locate the query.
 	state := p.srv.fsm.State()
-	_, query, err := state.PreparedQueryResolve(args.QueryIDOrName)
+	_, query, err := state.PreparedQueryResolve(args.QueryIDOrName, args.Agent)
 	if err != nil {
 		return err
 	}
@@ -317,7 +318,7 @@ func (p *PreparedQuery) Explain(args *structs.PreparedQueryExecuteRequest,
 	// If the query was filtered out, return an error.
 	if len(queries.Queries) == 0 {
 		p.srv.logger.Printf("[WARN] consul.prepared_query: Explain on prepared query '%s' denied due to ACLs", query.ID)
-		return errPermissionDenied
+		return acl.ErrPermissionDenied
 	}
 
 	reply.Query = *(queries.Queries[0])
@@ -332,7 +333,7 @@ func (p *PreparedQuery) Execute(args *structs.PreparedQueryExecuteRequest,
 	if done, err := p.srv.forward("PreparedQuery.Execute", args, args, reply); done {
 		return err
 	}
-	defer metrics.MeasureSince([]string{"consul", "prepared-query", "execute"}, time.Now())
+	defer metrics.MeasureSince([]string{"prepared-query", "execute"}, time.Now())
 
 	// We have to do this ourselves since we are not doing a blocking RPC.
 	p.srv.setQueryMeta(&reply.QueryMeta)
@@ -344,7 +345,7 @@ func (p *PreparedQuery) Execute(args *structs.PreparedQueryExecuteRequest,
 
 	// Try to locate the query.
 	state := p.srv.fsm.State()
-	_, query, err := state.PreparedQueryResolve(args.QueryIDOrName)
+	_, query, err := state.PreparedQueryResolve(args.QueryIDOrName, args.Agent)
 	if err != nil {
 		return err
 	}
@@ -353,7 +354,7 @@ func (p *PreparedQuery) Execute(args *structs.PreparedQueryExecuteRequest,
 	}
 
 	// Execute the query for the local DC.
-	if err := p.execute(query, reply); err != nil {
+	if err := p.execute(query, reply, args.Connect); err != nil {
 		return err
 	}
 
@@ -389,6 +390,31 @@ func (p *PreparedQuery) Execute(args *structs.PreparedQueryExecuteRequest,
 	// Respect the magic "_agent" flag.
 	if qs.Node == "_agent" {
 		qs.Node = args.Agent.Node
+	} else if qs.Node == "_ip" {
+		if args.Source.Ip != "" {
+			_, nodes, err := state.Nodes(nil)
+			if err != nil {
+				return err
+			}
+
+			for _, node := range nodes {
+				if args.Source.Ip == node.Address {
+					qs.Node = node.Node
+					break
+				}
+			}
+		} else {
+			p.srv.logger.Printf("[WARN] Prepared Query using near=_ip requires " +
+				"the source IP to be set but none was provided. No distance " +
+				"sorting will be done.")
+
+		}
+
+		// Either a source IP was given but we couldnt find the associated node
+		// or no source ip was given. In both cases we should wipe the Node value
+		if qs.Node == "_ip" {
+			qs.Node = ""
+		}
 	}
 
 	// Perform the distance sort
@@ -424,7 +450,7 @@ func (p *PreparedQuery) Execute(args *structs.PreparedQueryExecuteRequest,
 	// by the query setup.
 	if len(reply.Nodes) == 0 {
 		wrapper := &queryServerWrapper{p.srv}
-		if err := queryFailover(wrapper, query, args.Limit, args.QueryOptions, reply); err != nil {
+		if err := queryFailover(wrapper, query, args, reply); err != nil {
 			return err
 		}
 	}
@@ -442,7 +468,7 @@ func (p *PreparedQuery) ExecuteRemote(args *structs.PreparedQueryExecuteRemoteRe
 	if done, err := p.srv.forward("PreparedQuery.ExecuteRemote", args, args, reply); done {
 		return err
 	}
-	defer metrics.MeasureSince([]string{"consul", "prepared-query", "execute_remote"}, time.Now())
+	defer metrics.MeasureSince([]string{"prepared-query", "execute_remote"}, time.Now())
 
 	// We have to do this ourselves since we are not doing a blocking RPC.
 	p.srv.setQueryMeta(&reply.QueryMeta)
@@ -453,7 +479,7 @@ func (p *PreparedQuery) ExecuteRemote(args *structs.PreparedQueryExecuteRemoteRe
 	}
 
 	// Run the query locally to see what we can find.
-	if err := p.execute(&args.Query, reply); err != nil {
+	if err := p.execute(&args.Query, reply, args.Connect); err != nil {
 		return err
 	}
 
@@ -483,15 +509,25 @@ func (p *PreparedQuery) ExecuteRemote(args *structs.PreparedQueryExecuteRemoteRe
 // execute runs a prepared query in the local DC without any failover. We don't
 // apply any sorting options or ACL checks at this level - it should be done up above.
 func (p *PreparedQuery) execute(query *structs.PreparedQuery,
-	reply *structs.PreparedQueryExecuteResponse) error {
+	reply *structs.PreparedQueryExecuteResponse,
+	forceConnect bool) error {
 	state := p.srv.fsm.State()
-	_, nodes, err := state.CheckServiceNodes(nil, query.Service.Service)
+
+	// If we're requesting Connect-capable services, then switch the
+	// lookup to be the Connect function.
+	f := state.CheckServiceNodes
+	if query.Service.Connect || forceConnect {
+		f = state.CheckConnectServiceNodes
+	}
+
+	_, nodes, err := f(nil, query.Service.Service)
 	if err != nil {
 		return err
 	}
 
 	// Filter out any unhealthy nodes.
-	nodes = nodes.Filter(query.Service.OnlyPassing)
+	nodes = nodes.FilterIgnore(query.Service.OnlyPassing,
+		query.Service.IgnoreCheckIDs)
 
 	// Apply the node metadata filters, if any.
 	if len(query.Service.NodeMeta) > 0 {
@@ -624,7 +660,7 @@ func (q *queryServerWrapper) ForwardDC(method, dc string, args interface{}, repl
 // queryFailover runs an algorithm to determine which DCs to try and then calls
 // them to try to locate alternative services.
 func queryFailover(q queryServer, query *structs.PreparedQuery,
-	limit int, options structs.QueryOptions,
+	args *structs.PreparedQueryExecuteRequest,
 	reply *structs.PreparedQueryExecuteResponse) error {
 
 	// Pull the list of other DCs. This is sorted by RTT in case the user
@@ -692,8 +728,9 @@ func queryFailover(q queryServer, query *structs.PreparedQuery,
 		remote := &structs.PreparedQueryExecuteRemoteRequest{
 			Datacenter:   dc,
 			Query:        *query,
-			Limit:        limit,
-			QueryOptions: options,
+			Limit:        args.Limit,
+			QueryOptions: args.QueryOptions,
+			Connect:      args.Connect,
 		}
 		if err := q.ForwardDC("PreparedQuery.ExecuteRemote", dc, remote, reply); err != nil {
 			q.GetLogger().Printf("[WARN] consul.prepared_query: Failed querying for service '%s' in datacenter '%s': %s", query.Service.Service, dc, err)

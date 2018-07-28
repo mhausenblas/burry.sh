@@ -18,17 +18,21 @@ import (
 	"time"
 
 	"github.com/hashicorp/consul/acl"
-	"github.com/hashicorp/consul/agent/consul/agent"
-	"github.com/hashicorp/consul/agent/consul/servers"
+	ca "github.com/hashicorp/consul/agent/connect/ca"
+	"github.com/hashicorp/consul/agent/consul/autopilot"
+	"github.com/hashicorp/consul/agent/consul/fsm"
 	"github.com/hashicorp/consul/agent/consul/state"
-	"github.com/hashicorp/consul/agent/consul/structs"
+	"github.com/hashicorp/consul/agent/metadata"
 	"github.com/hashicorp/consul/agent/pool"
+	"github.com/hashicorp/consul/agent/router"
+	"github.com/hashicorp/consul/agent/structs"
+	"github.com/hashicorp/consul/agent/token"
 	"github.com/hashicorp/consul/lib"
+	"github.com/hashicorp/consul/sentinel"
 	"github.com/hashicorp/consul/tlsutil"
 	"github.com/hashicorp/consul/types"
 	"github.com/hashicorp/raft"
-	"github.com/hashicorp/raft-boltdb"
-	"github.com/hashicorp/serf/coordinate"
+	raftboltdb "github.com/hashicorp/raft-boltdb"
 	"github.com/hashicorp/serf/serf"
 )
 
@@ -71,39 +75,54 @@ const (
 	raftRemoveGracePeriod = 5 * time.Second
 )
 
+var (
+	ErrWANFederationDisabled = fmt.Errorf("WAN Federation is disabled")
+)
+
 // Server is Consul server which manages the service discovery,
 // health checking, DC forwarding, Raft, and multiple Serf pools.
 type Server struct {
+	// sentinel is the Sentinel code engine (can be nil).
+	sentinel sentinel.Evaluator
+
 	// aclAuthCache is the authoritative ACL cache.
 	aclAuthCache *acl.Cache
 
 	// aclCache is the non-authoritative ACL cache.
 	aclCache *aclCache
 
-	// autopilotPolicy controls the behavior of Autopilot for certain tasks.
-	autopilotPolicy AutopilotPolicy
-
-	// autopilotRemoveDeadCh is used to trigger a check for dead server removals.
-	autopilotRemoveDeadCh chan struct{}
-
-	// autopilotShutdownCh is used to stop the Autopilot loop.
-	autopilotShutdownCh chan struct{}
+	// autopilot is the Autopilot instance for this server.
+	autopilot *autopilot.Autopilot
 
 	// autopilotWaitGroup is used to block until Autopilot shuts down.
 	autopilotWaitGroup sync.WaitGroup
 
-	// clusterHealth stores the current view of the cluster's health.
-	clusterHealth     structs.OperatorHealthReply
-	clusterHealthLock sync.RWMutex
+	// caProvider is the current CA provider in use for Connect. This is
+	// only non-nil when we are the leader.
+	caProvider ca.Provider
+	// caProviderRoot is the CARoot that was stored along with the ca.Provider
+	// active. It's only updated in lock-step with the caProvider. This prevents
+	// races between state updates to active roots and the fetch of the provider
+	// instance.
+	caProviderRoot *structs.CARoot
+	caProviderLock sync.RWMutex
+
+	// caPruningCh is used to shut down the CA root pruning goroutine when we
+	// lose leadership.
+	caPruningCh      chan struct{}
+	caPruningLock    sync.RWMutex
+	caPruningEnabled bool
 
 	// Consul configuration
 	config *Config
 
+	// tokens holds ACL tokens initially from the configuration, but can
+	// be updated at runtime, so should always be used instead of going to
+	// the configuration directly.
+	tokens *token.Store
+
 	// Connection pool to other consul servers
 	connPool *pool.ConnPool
-
-	// Endpoints holds our RPC endpoints
-	endpoints endpoints
 
 	// eventChLAN is used to receive events from the
 	// serf cluster in the datacenter
@@ -115,12 +134,7 @@ type Server struct {
 
 	// fsm is the state machine used with Raft to provide
 	// strong consistency.
-	fsm *consulFSM
-
-	// localConsuls is used to track the known consuls
-	// in the local datacenter. Used to do leader forwarding.
-	localConsuls map[raft.ServerAddress]*agent.Server
-	localLock    sync.RWMutex
+	fsm *fsm.FSM
 
 	// Logger uses the provided LogOutput
 	logger *log.Logger
@@ -134,25 +148,32 @@ type Server struct {
 	raftTransport *raft.NetworkTransport
 	raftInmem     *raft.InmemStore
 
-	// leaderCh set up by setupRaft() and ensures that we get reliable leader
+	// raftNotifyCh is set up by setupRaft() and ensures that we get reliable leader
 	// transition notifications from the Raft layer.
-	leaderCh <-chan bool
+	raftNotifyCh <-chan bool
 
 	// reconcileCh is used to pass events from the serf handler
 	// into the leader manager, so that the strong state can be
 	// updated
 	reconcileCh chan serf.Member
 
-	// used to track when the server is ready to serve consistent reads, updated atomically
+	// readyForConsistentReads is used to track when the leader server is
+	// ready to serve consistent reads, after it has applied its initial
+	// barrier. This is updated atomically.
 	readyForConsistentReads int32
+
+	// leaveCh is used to signal that the server is leaving the cluster
+	// and trying to shed its RPC traffic onto other Consul servers. This
+	// is only ever closed.
+	leaveCh chan struct{}
 
 	// router is used to map out Consul servers in the WAN and in Consul
 	// Enterprise user-defined areas.
-	router *servers.Router
+	router *router.Router
 
-	// rpcListener is used to listen for incoming connections
-	rpcListener net.Listener
-	rpcServer   *rpc.Server
+	// Listener is used to listen for incoming connections
+	Listener  net.Listener
+	rpcServer *rpc.Server
 
 	// rpcTLS is the TLS config for incoming TLS requests
 	rpcTLS *tls.Config
@@ -161,9 +182,16 @@ type Server struct {
 	// which contains all the DC nodes
 	serfLAN *serf.Serf
 
+	// segmentLAN maps segment names to their Serf cluster
+	segmentLAN map[string]*serf.Serf
+
 	// serfWAN is the Serf cluster maintained between DC's
 	// which SHOULD only consist of Consul servers
 	serfWAN *serf.Serf
+
+	// serverLookup tracks server consuls in the local datacenter.
+	// Used to do leader forwarding and provide fast lookup by server id and address
+	serverLookup *ServerLookup
 
 	// floodLock controls access to floodCh.
 	floodLock sync.RWMutex
@@ -172,11 +200,10 @@ type Server struct {
 	// sessionTimers track the expiration time of each Session that has
 	// a TTL. On expiration, a SessionDestroy event will occur, and
 	// destroy the session via standard session destroy processing
-	sessionTimers     map[string]*time.Timer
-	sessionTimersLock sync.Mutex
+	sessionTimers *SessionTimers
 
 	// statsFetcher is used by autopilot to check the status of the other
-	// Consul servers.
+	// Consul router.
 	statsFetcher *StatsFetcher
 
 	// reassertLeaderCh is used to signal the leader loop should re-run
@@ -198,30 +225,18 @@ type Server struct {
 	shutdown     bool
 	shutdownCh   chan struct{}
 	shutdownLock sync.Mutex
-}
 
-// Holds the RPC endpoints
-type endpoints struct {
-	ACL           *ACL
-	Catalog       *Catalog
-	Coordinate    *Coordinate
-	Health        *Health
-	Internal      *Internal
-	KVS           *KVS
-	Operator      *Operator
-	PreparedQuery *PreparedQuery
-	Session       *Session
-	Status        *Status
-	Txn           *Txn
+	// embedded struct to hold all the enterprise specific data
+	EnterpriseServer
 }
 
 func NewServer(config *Config) (*Server, error) {
-	return NewServerLogger(config, nil)
+	return NewServerLogger(config, nil, new(token.Store))
 }
 
 // NewServer is used to construct a new Consul server from the
 // configuration, potentially returning an error
-func NewServerLogger(config *Config, logger *log.Logger) (*Server, error) {
+func NewServerLogger(config *Config, logger *log.Logger, tokens *token.Store) (*Server, error) {
 	// Check the protocol version.
 	if err := config.CheckProtocolVersion(); err != nil {
 		return nil, err
@@ -283,31 +298,37 @@ func NewServerLogger(config *Config, logger *log.Logger) (*Server, error) {
 
 	// Create server.
 	s := &Server{
-		autopilotRemoveDeadCh: make(chan struct{}),
-		autopilotShutdownCh:   make(chan struct{}),
-		config:                config,
-		connPool:              connPool,
-		eventChLAN:            make(chan serf.Event, 256),
-		eventChWAN:            make(chan serf.Event, 256),
-		localConsuls:          make(map[raft.ServerAddress]*agent.Server),
-		logger:                logger,
-		reconcileCh:           make(chan serf.Member, 32),
-		router:                servers.NewRouter(logger, config.Datacenter),
-		rpcServer:             rpc.NewServer(),
-		rpcTLS:                incomingTLS,
-		reassertLeaderCh:      make(chan chan error),
-		tombstoneGC:           gc,
-		shutdownCh:            shutdownCh,
+		config:           config,
+		tokens:           tokens,
+		connPool:         connPool,
+		eventChLAN:       make(chan serf.Event, 256),
+		eventChWAN:       make(chan serf.Event, 256),
+		logger:           logger,
+		leaveCh:          make(chan struct{}),
+		reconcileCh:      make(chan serf.Member, 32),
+		router:           router.NewRouter(logger, config.Datacenter),
+		rpcServer:        rpc.NewServer(),
+		rpcTLS:           incomingTLS,
+		reassertLeaderCh: make(chan chan error),
+		segmentLAN:       make(map[string]*serf.Serf, len(config.Segments)),
+		sessionTimers:    NewSessionTimers(),
+		tombstoneGC:      gc,
+		serverLookup:     NewServerLookup(),
+		shutdownCh:       shutdownCh,
 	}
 
-	// Set up the autopilot policy
-	s.autopilotPolicy = &BasicAutopilot{server: s}
+	// Initialize enterprise specific server functionality
+	if err := s.initEnterprise(); err != nil {
+		s.Shutdown()
+		return nil, err
+	}
 
 	// Initialize the stats fetcher that autopilot will use.
 	s.statsFetcher = NewStatsFetcher(logger, s.connPool, s.config.Datacenter)
 
 	// Initialize the authoritative ACL cache.
-	s.aclAuthCache, err = acl.NewCache(aclCacheSize, s.aclLocalFault)
+	s.sentinel = sentinel.New(logger)
+	s.aclAuthCache, err = acl.NewCache(aclCacheSize, s.aclLocalFault, s.sentinel)
 	if err != nil {
 		s.Shutdown()
 		return nil, fmt.Errorf("Failed to create authoritative ACL cache: %v", err)
@@ -319,7 +340,7 @@ func NewServerLogger(config *Config, logger *log.Logger) (*Server, error) {
 	if s.IsACLReplicationEnabled() {
 		local = s.aclLocalFault
 	}
-	if s.aclCache, err = newACLCache(config, logger, s.RPC, local); err != nil {
+	if s.aclCache, err = newACLCache(config, logger, s.RPC, local, s.sentinel); err != nil {
 		s.Shutdown()
 		return nil, fmt.Errorf("Failed to create non-authoritative ACL cache: %v", err)
 	}
@@ -330,44 +351,88 @@ func NewServerLogger(config *Config, logger *log.Logger) (*Server, error) {
 		return nil, fmt.Errorf("Failed to start RPC layer: %v", err)
 	}
 
+	// Initialize any extra RPC listeners for segments.
+	segmentListeners, err := s.setupSegmentRPC()
+	if err != nil {
+		s.Shutdown()
+		return nil, fmt.Errorf("Failed to start segment RPC layer: %v", err)
+	}
+
 	// Initialize the Raft server.
 	if err := s.setupRaft(); err != nil {
 		s.Shutdown()
 		return nil, fmt.Errorf("Failed to start Raft: %v", err)
 	}
 
-	// Initialize the LAN Serf.
-	s.serfLAN, err = s.setupSerf(config.SerfLANConfig,
-		s.eventChLAN, serfLANSnapshot, false)
+	// Serf and dynamic bind ports
+	//
+	// The LAN serf cluster announces the port of the WAN serf cluster
+	// which creates a race when the WAN cluster is supposed to bind to
+	// a dynamic port (port 0). The current memberlist implementation will
+	// update the bind port in the configuration after the memberlist is
+	// created, so we can pull it out from there reliably, even though it's
+	// a little gross to be reading the updated config.
+
+	// Initialize the WAN Serf if enabled
+	serfBindPortWAN := -1
+	if config.SerfWANConfig != nil {
+		serfBindPortWAN = config.SerfWANConfig.MemberlistConfig.BindPort
+		s.serfWAN, err = s.setupSerf(config.SerfWANConfig, s.eventChWAN, serfWANSnapshot, true, serfBindPortWAN, "", s.Listener)
+		if err != nil {
+			s.Shutdown()
+			return nil, fmt.Errorf("Failed to start WAN Serf: %v", err)
+		}
+		// See big comment above why we are doing this.
+		if serfBindPortWAN == 0 {
+			serfBindPortWAN = config.SerfWANConfig.MemberlistConfig.BindPort
+			if serfBindPortWAN == 0 {
+				return nil, fmt.Errorf("Failed to get dynamic bind port for WAN Serf")
+			}
+			s.logger.Printf("[INFO] agent: Serf WAN TCP bound to port %d", serfBindPortWAN)
+		}
+	}
+
+	// Initialize the LAN segments before the default LAN Serf so we have
+	// updated port information to publish there.
+	if err := s.setupSegments(config, serfBindPortWAN, segmentListeners); err != nil {
+		s.Shutdown()
+		return nil, fmt.Errorf("Failed to setup network segments: %v", err)
+	}
+
+	// Initialize the LAN Serf for the default network segment.
+	s.serfLAN, err = s.setupSerf(config.SerfLANConfig, s.eventChLAN, serfLANSnapshot, false, serfBindPortWAN, "", s.Listener)
 	if err != nil {
 		s.Shutdown()
 		return nil, fmt.Errorf("Failed to start LAN Serf: %v", err)
 	}
 	go s.lanEventHandler()
 
-	// Initialize the WAN Serf.
-	s.serfWAN, err = s.setupSerf(config.SerfWANConfig,
-		s.eventChWAN, serfWANSnapshot, true)
-	if err != nil {
-		s.Shutdown()
-		return nil, fmt.Errorf("Failed to start WAN Serf: %v", err)
-	}
+	// Start the flooders after the LAN event handler is wired up.
+	s.floodSegments(config)
 
 	// Add a "static route" to the WAN Serf and hook it up to Serf events.
-	if err := s.router.AddArea(types.AreaWAN, s.serfWAN, s.connPool); err != nil {
-		s.Shutdown()
-		return nil, fmt.Errorf("Failed to add WAN serf route: %v", err)
-	}
-	go servers.HandleSerfEvents(s.logger, s.router, types.AreaWAN, s.serfWAN.ShutdownCh(), s.eventChWAN)
-
-	// Fire up the LAN <-> WAN join flooder.
-	portFn := func(s *agent.Server) (int, bool) {
-		if s.WanJoinPort > 0 {
-			return s.WanJoinPort, true
+	if s.serfWAN != nil {
+		if err := s.router.AddArea(types.AreaWAN, s.serfWAN, s.connPool, s.config.VerifyOutgoing); err != nil {
+			s.Shutdown()
+			return nil, fmt.Errorf("Failed to add WAN serf route: %v", err)
 		}
-		return 0, false
+		go router.HandleSerfEvents(s.logger, s.router, types.AreaWAN, s.serfWAN.ShutdownCh(), s.eventChWAN)
+
+		// Fire up the LAN <-> WAN join flooder.
+		portFn := func(s *metadata.Server) (int, bool) {
+			if s.WanJoinPort > 0 {
+				return s.WanJoinPort, true
+			}
+			return 0, false
+		}
+		go s.Flood(nil, portFn, s.serfWAN)
 	}
-	go s.Flood(portFn, s.serfWAN)
+
+	// Start enterprise specific functionality
+	if err := s.startEnterprise(); err != nil {
+		s.Shutdown()
+		return nil, err
+	}
 
 	// Start monitoring leadership. This must happen after Serf is set up
 	// since it can fire events when leadership is obtained.
@@ -379,76 +444,20 @@ func NewServerLogger(config *Config, logger *log.Logger) (*Server, error) {
 	}
 
 	// Start listening for RPC requests.
-	go s.listen()
+	go s.listen(s.Listener)
+
+	// Start listeners for any segments with separate RPC listeners.
+	for _, listener := range segmentListeners {
+		go s.listen(listener)
+	}
 
 	// Start the metrics handlers.
 	go s.sessionStats()
 
-	// Start the server health checking.
-	go s.serverHealthLoop()
+	// Initialize Autopilot
+	s.initAutopilot(config)
 
 	return s, nil
-}
-
-// setupSerf is used to setup and initialize a Serf
-func (s *Server) setupSerf(conf *serf.Config, ch chan serf.Event, path string, wan bool) (*serf.Serf, error) {
-	addr := s.rpcListener.Addr().(*net.TCPAddr)
-	conf.Init()
-	if wan {
-		conf.NodeName = fmt.Sprintf("%s.%s", s.config.NodeName, s.config.Datacenter)
-	} else {
-		conf.NodeName = s.config.NodeName
-		conf.Tags["wan_join_port"] = fmt.Sprintf("%d", s.config.SerfWANConfig.MemberlistConfig.BindPort)
-	}
-	conf.Tags["role"] = "consul"
-	conf.Tags["dc"] = s.config.Datacenter
-	conf.Tags["id"] = string(s.config.NodeID)
-	conf.Tags["vsn"] = fmt.Sprintf("%d", s.config.ProtocolVersion)
-	conf.Tags["vsn_min"] = fmt.Sprintf("%d", ProtocolVersionMin)
-	conf.Tags["vsn_max"] = fmt.Sprintf("%d", ProtocolVersionMax)
-	conf.Tags["raft_vsn"] = fmt.Sprintf("%d", s.config.RaftConfig.ProtocolVersion)
-	conf.Tags["build"] = s.config.Build
-	conf.Tags["port"] = fmt.Sprintf("%d", addr.Port)
-	if s.config.Bootstrap {
-		conf.Tags["bootstrap"] = "1"
-	}
-	if s.config.BootstrapExpect != 0 {
-		conf.Tags["expect"] = fmt.Sprintf("%d", s.config.BootstrapExpect)
-	}
-	if s.config.NonVoter {
-		conf.Tags["nonvoter"] = "1"
-	}
-	if s.config.UseTLS {
-		conf.Tags["use_tls"] = "1"
-	}
-	conf.MemberlistConfig.LogOutput = s.config.LogOutput
-	conf.LogOutput = s.config.LogOutput
-	conf.Logger = s.logger
-	conf.EventCh = ch
-	if !s.config.DevMode {
-		conf.SnapshotPath = filepath.Join(s.config.DataDir, path)
-	}
-	conf.ProtocolVersion = protocolVersionMap[s.config.ProtocolVersion]
-	conf.RejoinAfterLeave = s.config.RejoinAfterLeave
-	if wan {
-		conf.Merge = &wanMergeDelegate{}
-	} else {
-		conf.Merge = &lanMergeDelegate{
-			dc:       s.config.Datacenter,
-			nodeID:   s.config.NodeID,
-			nodeName: s.config.NodeName,
-		}
-	}
-
-	// Until Consul supports this fully, we disable automatic resolution.
-	// When enabled, the Serf gossip may just turn off if we are the minority
-	// node which is rather unexpected.
-	conf.EnableNameConflictResolution = false
-	if err := lib.EnsurePath(conf.SnapshotPath, false); err != nil {
-		return nil, err
-	}
-
-	return serf.Create(conf)
 }
 
 // setupRaft is used to setup and initialize Raft
@@ -464,13 +473,25 @@ func (s *Server) setupRaft() error {
 
 	// Create the FSM.
 	var err error
-	s.fsm, err = NewFSM(s.tombstoneGC, s.config.LogOutput)
+	s.fsm, err = fsm.New(s.tombstoneGC, s.config.LogOutput)
 	if err != nil {
 		return err
 	}
 
+	var serverAddressProvider raft.ServerAddressProvider = nil
+	if s.config.RaftConfig.ProtocolVersion >= 3 { //ServerAddressProvider needs server ids to work correctly, which is only supported in protocol version 3 or higher
+		serverAddressProvider = s.serverLookup
+	}
+
 	// Create a transport layer.
-	trans := raft.NewNetworkTransport(s.raftLayer, 3, 10*time.Second, s.config.LogOutput)
+	transConfig := &raft.NetworkTransportConfig{
+		Stream:                s.raftLayer,
+		MaxPool:               3,
+		Timeout:               10 * time.Second,
+		ServerAddressProvider: serverAddressProvider,
+	}
+
+	trans := raft.NewNetworkTransportWithConfig(transConfig)
 	s.raftTransport = trans
 
 	// Make sure we set the LogOutput.
@@ -559,7 +580,7 @@ func (s *Server) setupRaft() error {
 				return fmt.Errorf("recovery failed to parse peers.json: %v", err)
 			}
 
-			tmpFsm, err := NewFSM(s.tombstoneGC, s.config.LogOutput)
+			tmpFsm, err := fsm.New(s.tombstoneGC, s.config.LogOutput)
 			if err != nil {
 				return fmt.Errorf("recovery failed to make temp FSM: %v", err)
 			}
@@ -583,8 +604,6 @@ func (s *Server) setupRaft() error {
 			return err
 		}
 		if !hasState {
-			// TODO (slackpad) - This will need to be updated when
-			// we add support for node IDs.
 			configuration := raft.Configuration{
 				Servers: []raft.Server{
 					raft.Server{
@@ -601,9 +620,9 @@ func (s *Server) setupRaft() error {
 	}
 
 	// Set up a channel for reliable leader notifications.
-	leaderCh := make(chan bool, 1)
-	s.config.RaftConfig.NotifyCh = leaderCh
-	s.leaderCh = leaderCh
+	raftNotifyCh := make(chan bool, 1)
+	s.config.RaftConfig.NotifyCh = raftNotifyCh
+	s.raftNotifyCh = raftNotifyCh
 
 	// Setup the Raft store.
 	s.raft, err = raft.NewRaft(s.config.RaftConfig, s.fsm, log, stable, snap, trans)
@@ -613,39 +632,36 @@ func (s *Server) setupRaft() error {
 	return nil
 }
 
+// endpointFactory is a function that returns an RPC endpoint bound to the given
+// server.
+type factory func(s *Server) interface{}
+
+// endpoints is a list of registered RPC endpoint factories.
+var endpoints []factory
+
+// registerEndpoint registers a new RPC endpoint factory.
+func registerEndpoint(fn factory) {
+	endpoints = append(endpoints, fn)
+}
+
 // setupRPC is used to setup the RPC listener
 func (s *Server) setupRPC(tlsWrap tlsutil.DCWrapper) error {
-	// Create endpoints
-	s.endpoints.ACL = &ACL{s}
-	s.endpoints.Catalog = &Catalog{s}
-	s.endpoints.Coordinate = NewCoordinate(s)
-	s.endpoints.Health = &Health{s}
-	s.endpoints.Internal = &Internal{s}
-	s.endpoints.KVS = &KVS{s}
-	s.endpoints.Operator = &Operator{s}
-	s.endpoints.PreparedQuery = &PreparedQuery{s}
-	s.endpoints.Session = &Session{s}
-	s.endpoints.Status = &Status{s}
-	s.endpoints.Txn = &Txn{s}
-
-	// Register the handlers
-	s.rpcServer.Register(s.endpoints.ACL)
-	s.rpcServer.Register(s.endpoints.Catalog)
-	s.rpcServer.Register(s.endpoints.Coordinate)
-	s.rpcServer.Register(s.endpoints.Health)
-	s.rpcServer.Register(s.endpoints.Internal)
-	s.rpcServer.Register(s.endpoints.KVS)
-	s.rpcServer.Register(s.endpoints.Operator)
-	s.rpcServer.Register(s.endpoints.PreparedQuery)
-	s.rpcServer.Register(s.endpoints.Session)
-	s.rpcServer.Register(s.endpoints.Status)
-	s.rpcServer.Register(s.endpoints.Txn)
+	for _, fn := range endpoints {
+		s.rpcServer.Register(fn(s))
+	}
 
 	ln, err := net.ListenTCP("tcp", s.config.RPCAddr)
 	if err != nil {
 		return err
 	}
-	s.rpcListener = ln
+	s.Listener = ln
+	if s.config.NotifyListen != nil {
+		s.config.NotifyListen()
+	}
+	// todo(fs): we should probably guard this
+	if s.config.RPCAdvertise == nil {
+		s.config.RPCAdvertise = ln.Addr().(*net.TCPAddr)
+	}
 
 	// Verify that we have a usable advertise address
 	if s.config.RPCAdvertise.IP.IsUnspecified() {
@@ -663,11 +679,9 @@ func (s *Server) setupRPC(tlsWrap tlsutil.DCWrapper) error {
 			return true
 		}
 
-		s.localLock.RLock()
-		server, ok := s.localConsuls[address]
-		s.localLock.RUnlock()
+		server := s.serverLookup.Server(address)
 
-		if !ok {
+		if server == nil {
 			return false
 		}
 
@@ -714,8 +728,8 @@ func (s *Server) Shutdown() error {
 		}
 	}
 
-	if s.rpcListener != nil {
-		s.rpcListener.Close()
+	if s.Listener != nil {
+		s.Listener.Close()
 	}
 
 	// Close the connection pool
@@ -743,7 +757,7 @@ func (s *Server) Leave() error {
 	// removed for some sane period of time.
 	isLeader := s.IsLeader()
 	if isLeader && numPeers > 1 {
-		minRaftProtocol, err := ServerMinRaftProtocol(s.serfLAN.Members())
+		minRaftProtocol, err := s.autopilot.MinRaftProtocol()
 		if err != nil {
 			return err
 		}
@@ -774,6 +788,14 @@ func (s *Server) Leave() error {
 			s.logger.Printf("[ERR] consul: failed to leave LAN Serf cluster: %v", err)
 		}
 	}
+
+	// Start refusing RPCs now that we've left the LAN pool. It's important
+	// to do this *after* we've left the LAN pool so that clients will know
+	// to shift onto another server if they perform a retry. We also wake up
+	// all queries in the RPC retry state.
+	s.logger.Printf("[INFO] consul: Waiting %s to drain RPC traffic", s.config.LeaveDrainTime)
+	close(s.leaveCh)
+	time.Sleep(s.config.LeaveDrainTime)
 
 	// If we were not leader, wait to be safely removed from the cluster. We
 	// must wait to allow the raft replication to take place, otherwise an
@@ -825,15 +847,16 @@ func (s *Server) Leave() error {
 	return nil
 }
 
-// numPeers is used to check on the number of known peers, including the local
-// node.
+// numPeers is used to check on the number of known peers, including potentially
+// the local node. We count only voters, since others can't actually become
+// leader, so aren't considered peers.
 func (s *Server) numPeers() (int, error) {
 	future := s.raft.GetConfiguration()
 	if err := future.Error(); err != nil {
 		return 0, err
 	}
-	configuration := future.Configuration()
-	return len(configuration.Servers), nil
+
+	return autopilot.NumPeers(future.Configuration()), nil
 }
 
 // JoinLAN is used to have Consul join the inner-DC pool
@@ -847,6 +870,9 @@ func (s *Server) JoinLAN(addrs []string) (int, error) {
 // The target address should be another node listening on the
 // Serf WAN address
 func (s *Server) JoinWAN(addrs []string) (int, error) {
+	if s.serfWAN == nil {
+		return 0, ErrWANFederationDisabled
+	}
 	return s.serfWAN.Join(addrs, true)
 }
 
@@ -862,6 +888,9 @@ func (s *Server) LANMembers() []serf.Member {
 
 // WANMembers is used to return the members of the LAN cluster
 func (s *Server) WANMembers() []serf.Member {
+	if s.serfWAN == nil {
+		return nil
+	}
 	return s.serfWAN.Members()
 }
 
@@ -870,8 +899,10 @@ func (s *Server) RemoveFailedNode(node string) error {
 	if err := s.serfLAN.RemoveFailedNode(node); err != nil {
 		return err
 	}
-	if err := s.serfWAN.RemoveFailedNode(node); err != nil {
-		return err
+	if s.serfWAN != nil {
+		if err := s.serfWAN.RemoveFailedNode(node); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -893,7 +924,22 @@ func (s *Server) KeyManagerWAN() *serf.KeyManager {
 
 // Encrypted determines if gossip is encrypted
 func (s *Server) Encrypted() bool {
-	return s.serfLAN.EncryptionEnabled() && s.serfWAN.EncryptionEnabled()
+	LANEncrypted := s.serfLAN.EncryptionEnabled()
+	if s.serfWAN == nil {
+		return LANEncrypted
+	}
+	return LANEncrypted && s.serfWAN.EncryptionEnabled()
+}
+
+// LANSegments returns a map of LAN segments by name
+func (s *Server) LANSegments() map[string]*serf.Serf {
+	segments := make(map[string]*serf.Serf, len(s.segmentLAN)+1)
+	segments[""] = s.serfLAN
+	for name, segment := range s.segmentLAN {
+		segments[name] = segment
+	}
+
+	return segments
 }
 
 // inmemCodec is used to do an RPC call without going over a network
@@ -1000,20 +1046,47 @@ func (s *Server) Stats() map[string]map[string]string {
 		},
 		"raft":     s.raft.Stats(),
 		"serf_lan": s.serfLAN.Stats(),
-		"serf_wan": s.serfWAN.Stats(),
 		"runtime":  runtimeStats(),
 	}
+	if s.serfWAN != nil {
+		stats["serf_wan"] = s.serfWAN.Stats()
+	}
+
+	for outerKey, outerValue := range s.enterpriseStats() {
+		if _, ok := stats[outerKey]; ok {
+			for innerKey, innerValue := range outerValue {
+				stats[outerKey][innerKey] = innerValue
+			}
+		} else {
+			stats[outerKey] = outerValue
+		}
+	}
+
 	return stats
 }
 
 // GetLANCoordinate returns the coordinate of the server in the LAN gossip pool.
-func (s *Server) GetLANCoordinate() (*coordinate.Coordinate, error) {
-	return s.serfLAN.GetCoordinate()
+func (s *Server) GetLANCoordinate() (lib.CoordinateSet, error) {
+	lan, err := s.serfLAN.GetCoordinate()
+	if err != nil {
+		return nil, err
+	}
+
+	cs := lib.CoordinateSet{"": lan}
+	for name, segment := range s.segmentLAN {
+		c, err := segment.GetCoordinate()
+		if err != nil {
+			return nil, err
+		}
+		cs[name] = c
+	}
+	return cs, nil
 }
 
-// GetWANCoordinate returns the coordinate of the server in the WAN gossip pool.
-func (s *Server) GetWANCoordinate() (*coordinate.Coordinate, error) {
-	return s.serfWAN.GetCoordinate()
+// ReloadConfig is used to have the Server do an online reload of
+// relevant configuration information
+func (s *Server) ReloadConfig(config *Config) error {
+	return nil
 }
 
 // Atomically sets a readiness state flag when leadership is obtained, to indicate that server is past its barrier write

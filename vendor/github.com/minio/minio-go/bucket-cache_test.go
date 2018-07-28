@@ -1,5 +1,6 @@
 /*
- * Minio Go Library for Amazon S3 Compatible Cloud Storage (C) 2016, 2016 Minio, Inc.
+ * Copyright
+ *  2015, 2016, 2017 Minio, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@ package minio
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/xml"
 	"io/ioutil"
 	"net/http"
@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/minio/minio-go/pkg/credentials"
 	"github.com/minio/minio-go/pkg/s3signer"
 )
 
@@ -86,17 +87,44 @@ func TestGetBucketLocationRequest(t *testing.T) {
 		// Set UserAgent for the request.
 		c.setUserAgent(req)
 
-		// Set sha256 sum for signature calculation only with signature version '4'.
-		if c.signature.isV4() {
-			req.Header.Set("X-Amz-Content-Sha256", hex.EncodeToString(sum256([]byte{})))
+		// Get credentials from the configured credentials provider.
+		value, err := c.credsProvider.Get()
+		if err != nil {
+			return nil, err
 		}
 
-		// Sign the request.
-		if c.signature.isV4() {
-			req = s3signer.SignV4(*req, c.accessKeyID, c.secretAccessKey, "us-east-1")
-		} else if c.signature.isV2() {
-			req = s3signer.SignV2(*req, c.accessKeyID, c.secretAccessKey)
+		var (
+			signerType      = value.SignerType
+			accessKeyID     = value.AccessKeyID
+			secretAccessKey = value.SecretAccessKey
+			sessionToken    = value.SessionToken
+		)
+
+		// Custom signer set then override the behavior.
+		if c.overrideSignerType != credentials.SignatureDefault {
+			signerType = c.overrideSignerType
 		}
+
+		// If signerType returned by credentials helper is anonymous,
+		// then do not sign regardless of signerType override.
+		if value.SignerType == credentials.SignatureAnonymous {
+			signerType = credentials.SignatureAnonymous
+		}
+
+		// Set sha256 sum for signature calculation only
+		// with signature version '4'.
+		switch {
+		case signerType.IsV4():
+			contentSha256 := emptySHA256Hex
+			if c.secure {
+				contentSha256 = unsignedPayload
+			}
+			req.Header.Set("X-Amz-Content-Sha256", contentSha256)
+			req = s3signer.SignV4(*req, accessKeyID, secretAccessKey, sessionToken, "us-east-1")
+		case signerType.IsV2():
+			req = s3signer.SignV2(*req, accessKeyID, secretAccessKey, false)
+		}
+
 		return req, nil
 
 	}

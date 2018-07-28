@@ -8,7 +8,7 @@ import (
 	"github.com/pascaldekloe/goe/verify"
 )
 
-func TestCatalog_Datacenters(t *testing.T) {
+func TestAPI_CatalogDatacenters(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -25,7 +25,8 @@ func TestCatalog_Datacenters(t *testing.T) {
 	})
 }
 
-func TestCatalog_Nodes(t *testing.T) {
+func TestAPI_CatalogNodes(t *testing.T) {
+	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
 
@@ -48,7 +49,9 @@ func TestCatalog_Nodes(t *testing.T) {
 					"lan": "127.0.0.1",
 					"wan": "127.0.0.1",
 				},
-				Meta:        map[string]string{},
+				Meta: map[string]string{
+					"consul-network-segment": "",
+				},
 				CreateIndex: meta.LastIndex - 1,
 				ModifyIndex: meta.LastIndex,
 			},
@@ -59,7 +62,8 @@ func TestCatalog_Nodes(t *testing.T) {
 	})
 }
 
-func TestCatalog_Nodes_MetaFilter(t *testing.T) {
+func TestAPI_CatalogNodes_MetaFilter(t *testing.T) {
+	t.Parallel()
 	meta := map[string]string{"somekey": "somevalue"}
 	c, s := makeClientWithConfig(t, nil, func(conf *testutil.TestServerConfig) {
 		conf.NodeMeta = meta
@@ -112,7 +116,7 @@ func TestCatalog_Nodes_MetaFilter(t *testing.T) {
 	})
 }
 
-func TestCatalog_Services(t *testing.T) {
+func TestAPI_CatalogServices(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -134,7 +138,8 @@ func TestCatalog_Services(t *testing.T) {
 	})
 }
 
-func TestCatalog_Services_NodeMetaFilter(t *testing.T) {
+func TestAPI_CatalogServices_NodeMetaFilter(t *testing.T) {
+	t.Parallel()
 	meta := map[string]string{"somekey": "somevalue"}
 	c, s := makeClientWithConfig(t, nil, func(conf *testutil.TestServerConfig) {
 		conf.NodeMeta = meta
@@ -175,12 +180,13 @@ func TestCatalog_Services_NodeMetaFilter(t *testing.T) {
 	})
 }
 
-func TestCatalog_Service(t *testing.T) {
+func TestAPI_CatalogService(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
 
 	catalog := c.Catalog()
+
 	retry.Run(t, func(r *retry.R) {
 		services, meta, err := catalog.Service("consul", "", nil)
 		if err != nil {
@@ -201,7 +207,7 @@ func TestCatalog_Service(t *testing.T) {
 	})
 }
 
-func TestCatalog_Service_NodeMetaFilter(t *testing.T) {
+func TestAPI_CatalogService_NodeMetaFilter(t *testing.T) {
 	t.Parallel()
 	meta := map[string]string{"somekey": "somevalue"}
 	c, s := makeClientWithConfig(t, nil, func(conf *testutil.TestServerConfig) {
@@ -230,7 +236,140 @@ func TestCatalog_Service_NodeMetaFilter(t *testing.T) {
 	})
 }
 
-func TestCatalog_Node(t *testing.T) {
+func TestAPI_CatalogConnect(t *testing.T) {
+	t.Parallel()
+	c, s := makeClient(t)
+	defer s.Stop()
+
+	catalog := c.Catalog()
+
+	// Register service and proxy instances to test against.
+	service := &AgentService{
+		ID:      "redis1",
+		Service: "redis",
+		Port:    8000,
+	}
+	proxy := &AgentService{
+		Kind:             ServiceKindConnectProxy,
+		ProxyDestination: "redis",
+		ID:               "redis-proxy1",
+		Service:          "redis-proxy",
+		Port:             8001,
+	}
+	check := &AgentCheck{
+		Node:      "foobar",
+		CheckID:   "service:redis1",
+		Name:      "Redis health check",
+		Notes:     "Script based health check",
+		Status:    HealthPassing,
+		ServiceID: "redis1",
+	}
+
+	reg := &CatalogRegistration{
+		Datacenter: "dc1",
+		Node:       "foobar",
+		Address:    "192.168.10.10",
+		Service:    service,
+		Check:      check,
+	}
+	proxyReg := &CatalogRegistration{
+		Datacenter: "dc1",
+		Node:       "foobar",
+		Address:    "192.168.10.10",
+		Service:    proxy,
+	}
+
+	retry.Run(t, func(r *retry.R) {
+		if _, err := catalog.Register(reg, nil); err != nil {
+			r.Fatal(err)
+		}
+		if _, err := catalog.Register(proxyReg, nil); err != nil {
+			r.Fatal(err)
+		}
+
+		services, meta, err := catalog.Connect("redis", "", nil)
+		if err != nil {
+			r.Fatal(err)
+		}
+
+		if meta.LastIndex == 0 {
+			r.Fatalf("Bad: %v", meta)
+		}
+
+		if len(services) == 0 {
+			r.Fatalf("Bad: %v", services)
+		}
+
+		if services[0].Datacenter != "dc1" {
+			r.Fatalf("Bad datacenter: %v", services[0])
+		}
+
+		if services[0].ServicePort != proxy.Port {
+			r.Fatalf("Returned port should be for proxy: %v", services[0])
+		}
+	})
+}
+
+func TestAPI_CatalogConnectNative(t *testing.T) {
+	t.Parallel()
+	c, s := makeClient(t)
+	defer s.Stop()
+
+	catalog := c.Catalog()
+
+	// Register service and proxy instances to test against.
+	service := &AgentService{
+		ID:      "redis1",
+		Service: "redis",
+		Port:    8000,
+		Connect: &AgentServiceConnect{Native: true},
+	}
+	check := &AgentCheck{
+		Node:      "foobar",
+		CheckID:   "service:redis1",
+		Name:      "Redis health check",
+		Notes:     "Script based health check",
+		Status:    HealthPassing,
+		ServiceID: "redis1",
+	}
+
+	reg := &CatalogRegistration{
+		Datacenter: "dc1",
+		Node:       "foobar",
+		Address:    "192.168.10.10",
+		Service:    service,
+		Check:      check,
+	}
+
+	retry.Run(t, func(r *retry.R) {
+		if _, err := catalog.Register(reg, nil); err != nil {
+			r.Fatal(err)
+		}
+
+		services, meta, err := catalog.Connect("redis", "", nil)
+		if err != nil {
+			r.Fatal(err)
+		}
+
+		if meta.LastIndex == 0 {
+			r.Fatalf("Bad: %v", meta)
+		}
+
+		if len(services) == 0 {
+			r.Fatalf("Bad: %v", services)
+		}
+
+		if services[0].Datacenter != "dc1" {
+			r.Fatalf("Bad datacenter: %v", services[0])
+		}
+
+		if services[0].ServicePort != service.Port {
+			r.Fatalf("Returned port should be for proxy: %v", services[0])
+		}
+	})
+}
+
+func TestAPI_CatalogNode(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -261,7 +400,7 @@ func TestCatalog_Node(t *testing.T) {
 	})
 }
 
-func TestCatalog_Registration(t *testing.T) {
+func TestAPI_CatalogRegistration(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()
@@ -292,8 +431,26 @@ func TestCatalog_Registration(t *testing.T) {
 		Service:    service,
 		Check:      check,
 	}
+	// Register a connect proxy for that service too
+	proxy := &AgentService{
+		ID:               "redis-proxy1",
+		Service:          "redis-proxy",
+		Port:             8001,
+		Kind:             ServiceKindConnectProxy,
+		ProxyDestination: service.ID,
+	}
+	proxyReg := &CatalogRegistration{
+		Datacenter: "dc1",
+		Node:       "foobar",
+		Address:    "192.168.10.10",
+		NodeMeta:   map[string]string{"somekey": "somevalue"},
+		Service:    proxy,
+	}
 	retry.Run(t, func(r *retry.R) {
 		if _, err := catalog.Register(reg, nil); err != nil {
+			r.Fatal(err)
+		}
+		if _, err := catalog.Register(proxyReg, nil); err != nil {
 			r.Fatal(err)
 		}
 
@@ -304,6 +461,10 @@ func TestCatalog_Registration(t *testing.T) {
 
 		if _, ok := node.Services["redis1"]; !ok {
 			r.Fatal("missing service: redis1")
+		}
+
+		if _, ok := node.Services["redis-proxy1"]; !ok {
+			r.Fatal("missing service: redis-proxy1")
 		}
 
 		health, _, err := c.Health().Node("foobar", nil)
@@ -328,7 +489,19 @@ func TestCatalog_Registration(t *testing.T) {
 		ServiceID:  "redis1",
 	}
 
+	// ... and proxy
+	deregProxy := &CatalogDeregistration{
+		Datacenter: "dc1",
+		Node:       "foobar",
+		Address:    "192.168.10.10",
+		ServiceID:  "redis-proxy1",
+	}
+
 	if _, err := catalog.Deregister(dereg, nil); err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	if _, err := catalog.Deregister(deregProxy, nil); err != nil {
 		t.Fatalf("err: %v", err)
 	}
 
@@ -340,6 +513,10 @@ func TestCatalog_Registration(t *testing.T) {
 
 		if _, ok := node.Services["redis1"]; ok {
 			r.Fatal("ServiceID:redis1 is not deregistered")
+		}
+
+		if _, ok := node.Services["redis-proxy1"]; ok {
+			r.Fatal("ServiceID:redis-proxy1 is not deregistered")
 		}
 	})
 
@@ -389,7 +566,7 @@ func TestCatalog_Registration(t *testing.T) {
 	})
 }
 
-func TestCatalog_EnableTagOverride(t *testing.T) {
+func TestAPI_CatalogEnableTagOverride(t *testing.T) {
 	t.Parallel()
 	c, s := makeClient(t)
 	defer s.Stop()

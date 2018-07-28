@@ -62,7 +62,7 @@ $ curl \
     "Output": "",
     "ServiceID": "",
     "ServiceName": "",
-    "ServiceTags": null
+    "ServiceTags": []
   },
   {
     "ID": "40e4a748-2192-161a-0510-9bf59fe950b5",
@@ -174,7 +174,7 @@ The table below shows this endpoint's support for
   `?near=_agent` will use the agent's node for the sort. This is specified as
   part of the URL as a query parameter.
 
-- `tag` `(string: "")` - Specifies the list of tags to filter the list. This is
+- `tag` `(string: "")` - Specifies the tag to filter the list. This is
   specifies as part of the URL as a query parameter.
 
 - `node-meta` `(string: "")` - Specifies a desired node metadata key/value pair
@@ -216,6 +216,9 @@ $ curl \
       "Service": "redis",
       "Tags": ["primary"],
       "Address": "10.1.10.12",
+      "Meta": {
+        "redis_version": "4.0"
+      },
       "Port": 8000
     },
     "Checks": [
@@ -239,7 +242,7 @@ $ curl \
         "Output": "",
         "ServiceID": "",
         "ServiceName": "",
-		"ServiceTags": null 
+        "ServiceTags": []
       }
     ]
   }
@@ -265,7 +268,7 @@ The table below shows this endpoint's support for
 
 ### Parameters
 
-- `state` `(string: <required>)` - Specifies the state to query. Spported states
+- `state` `(string: <required>)` - Specifies the state to query. Supported states
   are `any`, `passing`, `warning`, or `critical`. The `any` state is a wildcard
   that can be used to return all checks.
 
@@ -303,7 +306,7 @@ $ curl \
     "Output": "",
     "ServiceID": "",
     "ServiceName": "",
-	"ServiceTags": null
+    "ServiceTags": []
   },
   {
     "Node": "foobar",
