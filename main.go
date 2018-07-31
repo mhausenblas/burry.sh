@@ -88,8 +88,19 @@ func init() {
 	}
 	flag.Parse()
 
-	if envd := os.Getenv("DEBUG"); envd != "" {
+	switch log_level := os.Getenv("LOG_LEVEL"); log_level {
+  case "DEBUG":
 		log.SetLevel(log.DebugLevel)
+  case "WARN":
+		log.SetLevel(log.WarnLevel)
+  case "ERROR":
+		log.SetLevel(log.ErrorLevel)
+  case "FATAL":
+		log.SetLevel(log.FatalLevel)
+  case "PANIC":
+		log.SetLevel(log.PanicLevel)
+  default:
+		log.SetLevel(log.InfoLevel)
 	}
 
 	if bfpath, mbrf, err := loadbf(); err != nil {
@@ -162,7 +173,7 @@ func main() {
 		os.Exit(0)
 	}
 	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("Selected operation: %s", strings.ToUpper(bop)))
-	log.WithFields(log.Fields{"func": "main"}).Info(fmt.Sprintf("My config: %+v", brf))
+	log.WithFields(log.Fields{"func": "main"}).Debug(fmt.Sprintf("My config: %+v", brf))
 
 	if ok := processop(); ok {
 		if createburryfest {
