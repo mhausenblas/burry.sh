@@ -17,7 +17,7 @@ func backupZK() bool {
 		return false
 	}
 	zks := []string{brf.Endpoint}
-	zkconn, _, _ = zk.Connect(zks, time.Second)
+	zkconn, _, _ = zk.Connect(zks, time.Duration(brf.Timeout) * time.Second)
 	// use the ZK API to visit each node and store
 	// the values in the local filesystem:
 	visitZK("/", reapsimple)
@@ -72,7 +72,7 @@ func restoreZK() bool {
 			_ = os.RemoveAll(s)
 		}()
 		zks := []string{brf.Endpoint}
-		zkconn, _, _ = zk.Connect(zks, time.Second)
+		zkconn, _, _ = zk.Connect(zks, time.Duration(brf.Timeout) * time.Second)
 		zkconn.SetLogger(log.StandardLogger())
 		// walk the snapshot directory and use the ZK API to
 		// restore znodes from the local filesystem - note that

@@ -21,7 +21,7 @@ func backupETCD() bool {
 	cfg := etcd.Config{
 		Endpoints:               []string{"http://" + brf.Endpoint},
 		Transport:               etcd.DefaultTransport,
-		HeaderTimeoutPerRequest: time.Second,
+		HeaderTimeoutPerRequest: time.Duration(brf.Timeout) * time.Second,
 	}
 	c, _ := etcd.New(cfg)
 	kapi = etcd.NewKeysAPI(c)
@@ -74,7 +74,7 @@ func restoreETCD() bool {
 		cfg := etcd.Config{
 			Endpoints:               []string{"http://" + brf.Endpoint},
 			Transport:               etcd.DefaultTransport,
-			HeaderTimeoutPerRequest: time.Second,
+			HeaderTimeoutPerRequest: time.Duration(brf.Timeout) * time.Second,
 		}
 		c, _ := etcd.New(cfg)
 		kapi = etcd.NewKeysAPI(c)
