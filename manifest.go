@@ -18,6 +18,7 @@ import (
 type Burryfest struct {
 	InfraService  string      `json:"svc"`
 	Endpoint      string      `json:"svc-endpoint"`
+	Timeout       int         `json:"timeout"`
 	StorageTarget string      `json:"target"`
 	Creds         Credentials `json:"credentials"`
 }

@@ -43,6 +43,7 @@ var (
 	isvcs = [...]string{INFRA_SERVICE_ZK, INFRA_SERVICE_ETCD, INFRA_SERVICE_CONSUL}
 	// the infra service endpoint to use:
 	endpoint string
+  timeout  int
 	zkconn   *zk.Conn
 	kapi     etcd.KeysAPI
 	ckv      *consul.KV
@@ -77,6 +78,7 @@ func init() {
 	flag.StringVarP(&bop, "operation", "o", BURRY_OPERATION_BACKUP, fmt.Sprintf("The operation to carry out.\n\tSupported values are %v", bops))
 	flag.StringVarP(&isvc, "isvc", "i", INFRA_SERVICE_ZK, fmt.Sprintf("The type of infra service to back up or restore.\n\tSupported values are %v", isvcs))
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
+	flag.IntVar(&timeout, "timeout", 1, fmt.Sprintf("The infra service timeout, by default 1 second"))
 	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", startgets))
 	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=..."))
 	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
@@ -104,7 +106,7 @@ func init() {
 	}
 
 	if bfpath, mbrf, err := loadbf(); err != nil {
-		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, StorageTarget: starget, Creds: parsecred()}
+		brf = Burryfest{InfraService: isvc, Endpoint: endpoint, Timeout: timeout, StorageTarget: starget, Creds: parsecred()}
 	} else {
 		brf = mbrf
 		log.WithFields(log.Fields{"func": "init"}).Info(fmt.Sprintf("Using burryfest %s", bfpath))
