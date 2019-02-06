@@ -69,9 +69,10 @@ func parsecred() Credentials {
 	params := []CredParams{}
 	// 2nd to end are cred params in key-value format:
 	for _, p := range raw[1:] {
+		pair := strings.SplitN(p, "=", 2)
 		p := CredParams{
-			Key:   strings.Split(p, "=")[0],
-			Value: strings.Split(p, "=")[1],
+			Key:   pair[0],
+			Value: pair[1],
 		}
 		params = append(params, p)
 	}
