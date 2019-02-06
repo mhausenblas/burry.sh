@@ -32,7 +32,6 @@ func toremoteS3(localarch string) {
 	}()
 	endpoint := brf.Creds.StorageTargetEndpoint
 	s3Config := extractS3config()
-	useSSL := true
 	_, f := filepath.Split(localarch)
 	if s3Config.Bucket == "" {
 		s3Config.Bucket = brf.InfraService + "-backup"
@@ -44,7 +43,7 @@ func toremoteS3(localarch string) {
 
 	log.WithFields(log.Fields{"func": "toremoteS3"}).Debug(fmt.Sprintf("Trying to back up to %s/%s in S3 compatible remote storage", s3Config.Bucket, object))
 	mcOpts := minio.Options{}
-	mcOpts.Secure = useSSL
+	mcOpts.Secure = s3Config.SSL
 	if s3Config.AccessKeyId == "" && s3Config.SecretAccessKey == "" {
 		iamCred := credentials.NewIAM("")
 		mcOpts.Creds = iamCred
@@ -93,7 +92,6 @@ func fromremoteS3() string {
 	localarch := filepath.Join(cwd, based+".zip")
 	endpoint := brf.Creds.StorageTargetEndpoint
 	s3Config := extractS3config()
-	useSSL := true
 	if s3Config.Bucket == "" {
 		s3Config.Bucket = brf.InfraService + "-backup"
 	}
@@ -104,7 +102,7 @@ func fromremoteS3() string {
 
 	log.WithFields(log.Fields{"func": "fromremoteS3"}).Debug(fmt.Sprintf("Trying to retrieve %s/%s from S3 compatible remote storage", s3Config.Bucket, object))
 	mcOpts := minio.Options{}
-	mcOpts.Secure = useSSL
+	mcOpts.Secure = s3Config.SSL
 	if s3Config.AccessKeyId == "" && s3Config.SecretAccessKey == "" {
 		iamCred := credentials.NewIAM("")
 		mcOpts.Creds = iamCred
