@@ -75,13 +75,13 @@ Arguments:
         The manifest file captures the current command line parameters for re-use in subsequent operations.
   -c, --credentials string
         The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.
-        Example: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...,BUCKET=...,PREFIX=...
+        Example: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...,BUCKET=...,PREFIX=...,SSL=...
   -e, --endpoint string
         The infra service HTTP API endpoint to use.
         Example: localhost:8181 for Exhibitor
   -i, --isvc string
         The type of infra service to back up or restore.
-        Supported values are [etcd zk] (default "zk")
+        Supported values are [etcd zk consul] (default "zk")
   -o, --operation string
         The operation to carry out.
         Supported values are [backup restore] (default "backup")
@@ -90,7 +90,8 @@ Arguments:
         Example: 1483193387
   -t, --target string
         The storage target to use.
-        Supported values are [local minio s3 tty] (default "tty")
+        Supported values are [local minio s3 tty local] (default "tty")
+      --timeout=1: The infra service timeout, by default 1 second
   -v, --version
         Display version information and exit.
 ```
