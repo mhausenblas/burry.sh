@@ -80,7 +80,7 @@ func init() {
 	flag.StringVarP(&endpoint, "endpoint", "e", "", fmt.Sprintf("The infra service HTTP API endpoint to use.\n\tExample: localhost:8181 for Exhibitor"))
 	flag.IntVar(&timeout, "timeout", 1, fmt.Sprintf("The infra service timeout, by default 1 second"))
 	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", startgets))
-	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=..."))
+	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...,BUCKET=...,PREFIX=...,SSL=..."))
 	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
 
 	flag.Usage = func() {
