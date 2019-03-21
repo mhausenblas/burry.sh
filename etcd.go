@@ -106,7 +106,9 @@ func visitETCDReverse(path string, f os.FileInfo, err error) error {
 				log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as leaf key", key))
 				if c, cerr := readc(cfile); cerr != nil {
 					log.WithFields(log.Fields{"func": "visitETCDReverse"}).Error(fmt.Sprintf("%s", cerr))
-					return cerr
+					if !forget {
+						return cerr
+					}
 				} else {
 					if _, kerr := kapi.Set(context.Background(), key, string(c), &etcd.SetOptions{Dir: false, PrevExist: etcd.PrevNoExist}); kerr == nil {
 						log.WithFields(log.Fields{"func": "visitETCDReverse"}).Info(fmt.Sprintf("Restored %s", key))

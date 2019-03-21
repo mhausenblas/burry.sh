@@ -109,7 +109,9 @@ func visitZKReverse(path string, f os.FileInfo, err error) error {
 						log.WithFields(log.Fields{"func": "visitZKReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as leaf znode", znode))
 						if c, cerr := readc(cfile); cerr != nil {
 							log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", cerr))
-							return cerr
+							if !forget {
+								return cerr
+							}
 						} else {
 							if _, zerr := zkconn.Create(znode, c, 0, zk.WorldACL(zk.PermAll)); zerr != nil {
 								log.WithFields(log.Fields{"func": "visitZKReverse"}).Error(fmt.Sprintf("%s", zerr))
