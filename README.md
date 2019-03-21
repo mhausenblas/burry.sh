@@ -79,6 +79,8 @@ Arguments:
   -e, --endpoint string
         The infra service HTTP API endpoint to use.
         Example: localhost:8181 for Exhibitor
+  -f, --forget boolean 
+        Forget existing data
   -i, --isvc string
         The type of infra service to back up or restore.
         Supported values are [etcd zk consul] (default "zk")

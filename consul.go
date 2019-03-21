@@ -102,7 +102,9 @@ func visitCONSULReverse(path string, f os.FileInfo, err error) error {
 				log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Debug(fmt.Sprintf("Attempting to insert %s as leaf key", key))
 				if c, cerr := readc(cfile); cerr != nil {
 					log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", cerr))
-					return cerr
+					if !forget {
+						return cerr
+					}
 				} else {
 					if node, _, eerr := ckv.Get(key, &qopts); eerr != nil {
 						log.WithFields(log.Fields{"func": "visitCONSULReverse"}).Error(fmt.Sprintf("%s", eerr))
