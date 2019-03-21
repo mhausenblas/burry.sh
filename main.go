@@ -64,6 +64,8 @@ var (
 	snapshotid string
 	// number of restored items (znodes or keys):
 	numrestored int
+	// Forget existing data
+	forget bool
 )
 
 // reap function types take a node path
@@ -82,6 +84,7 @@ func init() {
 	flag.StringVarP(&starget, "target", "t", STORAGE_TARGET_TTY, fmt.Sprintf("The storage target to use.\n\tSupported values are %v", startgets))
 	flag.StringVarP(&cred, "credentials", "c", "", fmt.Sprintf("The credentials to use in format STORAGE_TARGET_ENDPOINT,KEY1=VAL1,...KEYn=VALn.\n\tExample: s3.amazonaws.com,ACCESS_KEY_ID=...,SECRET_ACCESS_KEY=...,BUCKET=...,PREFIX=...,SSL=..."))
 	flag.StringVarP(&snapshotid, "snapshot", "s", "", fmt.Sprintf("The ID of the snapshot.\n\tExample: 1483193387"))
+	flag.BoolVarP(&forget, "forget", "f", true, fmt.Sprintf("Forget existing data "))
 
 	flag.Usage = func() {
 		fmt.Printf("Usage: burry [args]\n\n")
