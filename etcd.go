@@ -114,6 +114,13 @@ func visitETCDReverse(path string, f os.FileInfo, err error) error {
 						log.WithFields(log.Fields{"func": "visitETCDReverse"}).Info(fmt.Sprintf("Restored %s", key))
 						log.WithFields(log.Fields{"func": "visitETCDReverse"}).Debug(fmt.Sprintf("Value: %s", c))
 						numrestored = numrestored + 1
+					} else {
+						if !forget {
+							log.WithFields(log.Fields{"func": "visitETCDReverse"}).Error(fmt.Sprintf("%s", kerr))
+							return kerr
+						} else {
+							log.WithFields(log.Fields{"func": "visitETCDReverse"}).Info(fmt.Sprintf("Ignoring existing %s", kerr))
+						}
 					}
 				}
 			} else {
